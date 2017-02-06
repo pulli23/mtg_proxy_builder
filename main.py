@@ -76,14 +76,14 @@ def setup_parser():
                               help="Input deck filename")
     parser_proxy.add_argument("output",
                               help="output latex file")
-    parser.add_argument("-i", "--inventory",
+    parser_proxy.add_argument("-i", "--inventory",
                         help="Inventory filename")
-    parser.add_argument("-f", "--figures",
+    parser_proxy.add_argument("-f", "--figures",
                         default="",
                         help="Proxy image folder")
-    parser.add_argument("-t", "--type",
+    parser_proxy.add_argument("-t", "--type",
                         help="Input type")
-    parser.add_argument("--inventory-type",
+    parser_proxy.add_argument("--inventory-type",
                         help="Inventory input type")
     parser_proxy.add_argument("-p", "--paper",
                               default='a4paper',
@@ -94,18 +94,26 @@ def setup_parser():
                               metavar=("horizontal", "vertical"),
                               help="margin dimensions (mm)")
     parser_proxy.add_argument("-c", "--cutthick",
-                              type=int,
+                              type=float,
                               default=0,
                               help="cut thickness (mm)")
     parser_proxy.add_argument("--cutcol",
                               default='black',
                               help="cut colour")
+    parser_proxy.add_argument("--background",
+                              help="image background colour")
     parser_proxy.add_argument("--template",
                               default="template.tex",
                               help="template file")
-    parser_proxy.add_argument("--specific_edition",
+    parser_proxy.add_argument("--specific-edition",
                               action="store_false",
                               help="Flag to indicate card edition is important for proxies")
+    parser_proxy.add_argument("--include-basics",
+                              action="store_true",
+                              help="Include basic lands in proxy list")
+    parser_proxy.add_argument("-v","--verbose",
+                              action="store_true",
+                              help="Verbose printing messages")
     return parser
 
 
@@ -115,24 +123,34 @@ def main():
     projectname, projectdirectory, imagedirectory = setup(PROJECTNAME, PROJECTDIR)
 
     parser = setup_parser()
-
+    parser.parse_args(["proxy", "-h"])
     args = parser.parse_args(
-        ["proxy", os.path.expanduser("~/proxylist/racing_dwarves.dck"), "main.tex", "--specific_edition", "--cutcol", "white", "--cutthick", "2"])
+        ["proxy", os.path.expanduser("~/proxylist/racing_dwarves.dck"), "main.tex", "--specific-edition", "--cutcol", "white", "--cutthick", "0.5"])
     inv = deck.Deck()
     if args.inventory is not None:
-        print('Loading deck ({0})...'.format(args.inventory))
+        print('Loading inventory ({0})...'.format(args.inventory))
         with open(args.inventory) as file:
             inv.load(file, args.inventory_readfunc)
         print("done!")
 
     dck = deck.Deck()
-    with open(os.path.expanduser("~/proxylist/racing_dwarves.dck")) as f:
+    print('Loading deck ({0})...'.format(args.input))
+    with open(args.input) as f:
         dck.load(f, args.readfunc)
+    print("done!")
 
     if not args.specific_edition:
         dck = deck.Deck(*dck.remove_version())
 
-    proxies = deck.exclude_inventory(dck, inv)
+    if not args.include_basics:
+        proxies = deck.remove_basic_lands(dck)
+    else:
+        proxies = dck
+
+    proxies = deck.exclude_inventory(proxies, inv)
+    if args.verbose:
+        print("PROXY LIST")
+        print(proxies)
 
     image_fnames = imd.get_all_images(proxies, args.figures)
     rel_fig_dir = os.path.relpath(args.figures, os.path.dirname(args.output))
@@ -143,6 +161,7 @@ def main():
                                  cut_color=args.cutcol,
                                  cut_thickness=args.cutthick,
                                  card_dimensions=None,
+                                 background_colour=args.background
                                  )
 
 

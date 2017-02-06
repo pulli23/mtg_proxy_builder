@@ -2,7 +2,9 @@ import os
 import re
 import shutil
 import requests
+import difflib
 from typing import Dict
+import operator
 
 import deck
 import card
@@ -17,7 +19,10 @@ def find_image(card: card.Card, source: str = "http://magiccards.info") -> str:
     res = requests.get(source + "/query", payload)
     res.raise_for_status()
     print('.', end='')
-    matchobj = re.search(r'img\s+src="({0}/scans/[^"\s]+)"'.format(re.escape(source)), res.text)
+    matchiter = re.finditer(r'img\s+src="({0}/scans/[^"\s]+)"\s+alt="([^"]*)"'.format(re.escape(source)), res.text)
+
+    matchobj = max(((difflib.SequenceMatcher(None, mo.group(2).lower(), card.name.lower()).ratio(), mo)
+                 for mo in matchiter), key=operator.itemgetter(0))[1]
     print('.', end='')
     return matchobj.group(1)
 

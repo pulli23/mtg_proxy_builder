@@ -1,4 +1,5 @@
 import os
+import copy
 from collections import Counter
 from typing import Dict, Optional, Tuple, List, Sequence, Iterable
 
@@ -80,7 +81,7 @@ class Deck:
         if len(self.sideboard) > 0:
             d = 'Side board ({0})\n    {1}'.format(str(self.number_cards_side()), create_liststring(self.sideboard))
             ret.append(d)
-        return '\n\n'.join(ret)
+        return '\n'.join(ret)
 
     def load(self, source, reader):
         def create_counter(l: Sequence[CardCountTy]) -> Counter:
@@ -189,14 +190,22 @@ class Deck:
         return [(c, n) for c, n in area.items() if item.alike(c)]
 
 
-def remove_basic_lands(dck: Deck, basics: Optional[Iterable[Card]] = None):
+# noinspection PyProtectedMember
+def remove_basic_lands(dck: Deck, basics: Optional[Iterable[Card]] = None) -> Deck:
+    outdck = copy.deepcopy(dck)
     if basics is None:
         lands = [Card("plains"), Card("island"), Card("swamp"), Card("mountain"), Card("forest")]
     else:
         lands = basics
-    for i in dck.mainboard:
+    for i in outdck.mainboard:
         if any(i.name == j.name for j in lands):
-            dck.mainboard[i] = 0
+            outdck.mainboard[i] = 0
+    for i in outdck.sideboard:
+        if any(i.name == j.name for j in lands):
+            outdck.sideboard[i] = 0
+    outdck._mainboard += Counter()
+    outdck._sideboard += Counter()
+    return outdck
 
 
 def exclude_inventory(dck: Deck, inventory: Deck) -> Deck:
