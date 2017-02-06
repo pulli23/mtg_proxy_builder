@@ -13,9 +13,10 @@ class OutputLatex:
 
     def __init__(self, image_directory: str = "", mypaper: Union[str, paper.Paper] = "a4paper",
                  card_dimensions: Optional[Tuple[float, float]] = None, cut_thickness: float = 0,
-                 cut_color: str="black", **kwargs):
+                 cut_color: str="black", background_color: str="black",**kwargs):
         self.cut_color = cut_color
         self.cut_thickness = cut_thickness
+        self.background_color = background_color
         self.image_directory = image_directory
         if card_dimensions is None:
             card_dimensions = (63 - 2, 88 - 2)
@@ -61,7 +62,7 @@ class OutputLatex:
     def load_image_list(self, images: Dict[str, int]):
         image_list = []
         for img, num in images.items():
-            image_list.extend([self.image_directory + img] * num)
+            image_list.extend([os.path.join(self.image_directory, img)] * num)
         self.images = image_list
         return image_list
 
@@ -98,11 +99,12 @@ class OutputLatex:
                                 vmargin=mypaper.margins[1],
                                 num_img_ver=cardlayout[0],
                                 num_img_hor=cardlayout[1],
-                                images=[os.path.splitext(img)[0] for img in image_list],
+                                images=[os.path.splitext(img)[0].replace('\\', '/') for img in image_list],
                                 img_width=card_dimensions[0],
                                 img_height=card_dimensions[1],
                                 cut_thickness=self.cut_thickness,
                                 cut_color=self.cut_color,
+                                background_color=self.background_color,
                                 **{**self.extra_settings, **kwargs})
         print("Done!")
         return lastr

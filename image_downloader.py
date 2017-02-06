@@ -2,13 +2,14 @@ import os
 import re
 import shutil
 import requests
+from typing import Dict
 
 import deck
 import card
 
 
-def find_image(card: card.Card, source: str = "http://magiccards.info") -> tuple:
-    name = card.name.replace_all('//', '/')
+def find_image(card: card.Card, source: str = "http://magiccards.info") -> str:
+    name = card.name.replace('//', '/')
     if card.version:
         name += " e:\"{0}\"".format(card.version)
     print('.', end='')
@@ -21,7 +22,7 @@ def find_image(card: card.Card, source: str = "http://magiccards.info") -> tuple
     return matchobj.group(1)
 
 
-def get_all_images(names: deck.Deck, output_directory: str):
+def get_all_images(names: deck.Deck, output_directory: str) -> Dict[card.Card, str]:
     print("Loading images...")
     outnames = {}
     # outcounter = Counter()
@@ -33,6 +34,7 @@ def get_all_images(names: deck.Deck, output_directory: str):
                 pass
             else:
                 try:
+
                     print("\rdownloading {0}".format(card), end='')
                     outname = get_image(card, output_directory)
                     outnames[card] = outname
@@ -50,7 +52,6 @@ def name_to_fname(name: str) -> str:
 def get_image(card: card.Card, output_directory: str) -> str:
     outname = name_to_fname(card.name)
     try:
-        print(r"\[{0}\]".format(card.version))
         prog = re.compile(outname + (r"\[{0}\]".format(card.version) if card.version else r"(\[[^]]+?\])?"),
                           flags=re.IGNORECASE)
         existing_fname = next(f for f in os.listdir(output_directory)

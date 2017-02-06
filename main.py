@@ -1,16 +1,15 @@
 import os
 import argparse
+import re
 from collections import Counter
 from typing import Sequence, Tuple, Any, Dict, TypeVar, Optional
 
 import deck
 import card
 import output
+import paper
+import load_file
 import image_downloader as imd
-
-
-PROJECTNAME = 'proxylist'
-PROJECTDIR = os.path.expanduser('~/' + PROJECTNAME + '/')
 
 
 def setup(projectname, projectdirectory):
@@ -22,10 +21,49 @@ def setup(projectname, projectdirectory):
     return projectname, projectdirectory, imagedirectory
 
 
+class SetupData:
+    def __init__(self, parseobj, **kwargs):
+        super().__init__(**kwargs)
+        for a in vars(parseobj):
+            setattr(self, a, getattr(parseobj, a))
+
+        self.input = os.path.normpath(self.input)
+        self.project_directory = os.path.dirname(self.input)
+        if not os.path.isabs(self.output):
+            self.output = os.path.normpath(os.path.join(self.project_directory, self.output))
+        if self.inventory is not None and not os.path.isabs(self.inventory):
+            self.inventory = os.path.normpath(os.path.join(self.project_directory, self.inventory))
+        if not os.path.isabs(self.figures):
+            self.figures = os.path.normpath(os.path.join(self.project_directory, self.figures))
+        all_type_reverse_keys = {load_file.read_csv: ("csv", "deckbox"),
+                                 load_file.read_txt: ("txt", "text", "plain"),
+                                 load_file.read_xmage_deck: ("xmage",)}
+        all_type_keys = {k: fun for fun, keys in all_type_reverse_keys.items() for k in keys}
+        try:
+            self.readfunc = all_type_keys[self.type]
+        except KeyError:
+            self.readfunc = load_file.read_any_file
+        if self.inventory_type is None:
+            self.inventory_readfunc = self.readfunc
+        else:
+            try:
+                self.inventory_readfunc = all_type_keys[self.inventory_type]
+            except:
+                self.inventory_readfunc = load_file.read_any_file
+        mo = re.fullmatch(r"(\d+)x(\d+)", self.paper)
+        if mo:
+            self.paper = paper.Paper(width=mo[1], height=mo[2], margins=self.margins)
+        else:
+            self.paper = paper.Paper(name=self.paper, margins=self.margins)
+
 
 class ArgumentParser(argparse.ArgumentParser):
     def error(self, message: any):
-        raise AttributeError(message)
+        raise NameError(message)
+
+    def parse_args(self, *args, **kwargs):
+        r = super().parse_args(*args, **kwargs)
+        return SetupData(r)
 
 
 def setup_parser():
@@ -33,61 +71,79 @@ def setup_parser():
     subparsers = parser.add_subparsers(help="Action to do with the deck")
     parser_proxy = subparsers.add_parser("proxy",
                                          help="create a proxy deck")
-    parser.add_argument("deck",
-                        help="Input deck filename")
+    parser_proxy.set_defaults(cmd="proxy")
+    parser_proxy.add_argument("input",
+                              help="Input deck filename")
+    parser_proxy.add_argument("output",
+                              help="output latex file")
     parser.add_argument("-i", "--inventory",
                         help="Inventory filename")
     parser.add_argument("-f", "--figures",
+                        default="",
                         help="Proxy image folder")
     parser.add_argument("-t", "--type",
                         help="Input type")
+    parser.add_argument("--inventory-type",
+                        help="Inventory input type")
     parser_proxy.add_argument("-p", "--paper",
-                              help="Paper namer or dimensions")
+                              default='a4paper',
+                              help="Paper name or dimensions")
     parser_proxy.add_argument("-m", "--margins",
                               nargs=2,
-                              type=int,
+                              type=float,
                               metavar=("horizontal", "vertical"),
                               help="margin dimensions (mm)")
     parser_proxy.add_argument("-c", "--cutthick",
                               type=int,
+                              default=0,
                               help="cut thickness (mm)")
     parser_proxy.add_argument("--cutcol",
+                              default='black',
                               help="cut colour")
     parser_proxy.add_argument("--template",
                               default="template.tex",
                               help="template file")
+    parser_proxy.add_argument("--specific_edition",
+                              action="store_false",
+                              help="Flag to indicate card edition is important for proxies")
     return parser
 
 
 def main():
-    parser = setup_parser()
-
+    PROJECTNAME = 'proxylist'
+    PROJECTDIR = os.path.expanduser('~/' + PROJECTNAME + '/')
     projectname, projectdirectory, imagedirectory = setup(PROJECTNAME, PROJECTDIR)
 
-    mydeck = deck.Deck()
-    mydeck.load_xmage(os.path.join(PROJECTDIR, "racing_dwarves.dck"))
-    print(mydeck)
+    parser = setup_parser()
 
-    myinventory = deck.Deck()
-    myinventory.load_deckbox_inventory(os.path.join(PROJECTDIR, "inventory.csv"))
-    # print(myinventory)
-    c = myinventory.find_all_copies(card.Card("angel of invention"))[0][0]
+    args = parser.parse_args(
+        ["proxy", os.path.expanduser("~/proxylist/racing_dwarves.dck"), "main.tex", "--specific_edition", "--cutcol", "white", "--cutthick", "2"])
+    inv = deck.Deck()
+    if args.inventory is not None:
+        print('Loading deck ({0})...'.format(args.inventory))
+        with open(args.inventory) as file:
+            inv.load(file, args.inventory_readfunc)
+        print("done!")
 
-    myinventory = deck.Deck(Counter(8 * [c]))
+    dck = deck.Deck()
+    with open(os.path.expanduser("~/proxylist/racing_dwarves.dck")) as f:
+        dck.load(f, args.readfunc)
 
-    proxies = deck.exclude_inventory(mydeck, myinventory)
+    if not args.specific_edition:
+        dck = deck.Deck(*dck.remove_version())
 
-    img_fnames = imd.get_all_images(proxies, os.path.join(projectdirectory, imagedirectory))
+    proxies = deck.exclude_inventory(dck, inv)
 
-    print(proxies)
-
-    proxies.output_latex_proxies(os.path.join(PROJECTDIR, "test.tex"), img_fnames,
-                                 template="template.tex",
-                                 image_directory=imagedirectory,
-                                 mypaper="a4paper",
-                                 cut_thickness=1,
-                                 cut_color="black")
-    exit()
+    image_fnames = imd.get_all_images(proxies, args.figures)
+    rel_fig_dir = os.path.relpath(args.figures, os.path.dirname(args.output))
+    if rel_fig_dir == ".":
+        rel_fig_dir = ""
+    proxies.output_latex_proxies(args.output, image_fnames, rel_fig_dir, args.template,
+                                 mypaper=args.paper,
+                                 cut_color=args.cutcol,
+                                 cut_thickness=args.cutthick,
+                                 card_dimensions=None,
+                                 )
 
 
 if __name__ == "__main__":

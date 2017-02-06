@@ -1,6 +1,6 @@
 import os
-from collections import Counter, defaultdict
-from typing import Dict, Optional, Tuple, List, Any, Sequence, Iterable
+from collections import Counter
+from typing import Dict, Optional, Tuple, List, Sequence, Iterable
 
 import load_file
 import output
@@ -200,10 +200,7 @@ def remove_basic_lands(dck: Deck, basics: Optional[Iterable[Card]] = None):
 
 
 def exclude_inventory(dck: Deck, inventory: Deck) -> Deck:
-    if inventory is None:
-        inv_counter = Counter()
-    else:
-        inv_counter = inventory.full_deck
+    inv_counter = inventory.full_deck
     main_out = Counter()
     side_out = Counter()
     outskipped = Counter()
