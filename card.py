@@ -229,12 +229,16 @@ for name, short in MTGSET_CODES.items():
 MTGSET_CODES.update(__append)
 __append = {}
 for name, short in MTGSET_CODES.items():
+    ex = "Prerelease Events: "
     dd = "duel decks: "
     ftv = "from the vault: "
     if name.startswith(dd) and len(name) > len(dd):
         __append[name[len(dd):]] = short
     elif name.startswith(ftv) and len(name) > len(ftv):
         __append["ftv: " + name[len(ftv):]] = short
+    else:
+        __append[ex + name] = short
+MTGSET_CODES.update(__append)
 MTGSET_CODES.update(__append)
 
 MTGSET_CODES = {n.lower(): v.lower() for n, v in MTGSET_CODES.items()}

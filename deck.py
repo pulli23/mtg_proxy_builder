@@ -85,7 +85,10 @@ class Deck:
 
     def load(self, source, reader):
         def create_counter(l: Sequence[CardCountTy]) -> Counter:
-            return Counter({item[0]: item[1] for item in l})
+            c = Counter()
+            for item in l:
+                c[item[0]] += item[1]
+            return c
 
         main, side = reader(source)
         self._mainboard = create_counter(main)

@@ -5,6 +5,7 @@ import requests
 import difflib
 from typing import Dict
 import operator
+import errno
 
 import deck
 import card
@@ -55,6 +56,12 @@ def name_to_fname(name: str) -> str:
 
 
 def get_image(card: card.Card, output_directory: str) -> str:
+    try:
+        os.makedirs(output_directory)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
     outname = name_to_fname(card.name)
     try:
         prog = re.compile(outname + (r"\[{0}\]".format(card.version) if card.version else r"(\[[^]]+?\])?"),

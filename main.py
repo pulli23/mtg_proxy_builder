@@ -1,8 +1,6 @@
 import os
 import argparse
 import re
-from collections import Counter
-from typing import Sequence, Tuple, Any, Dict, TypeVar, Optional
 
 import deck
 import card
@@ -10,16 +8,6 @@ import output
 import paper
 import load_file
 import image_downloader as imd
-
-
-def setup(projectname, projectdirectory):
-    if not os.path.exists(projectdirectory):
-        os.makedirs(projectdirectory)
-    imagedirectory = r"images/"
-    if not os.path.exists(projectdirectory + imagedirectory):
-        os.makedirs(projectdirectory + imagedirectory)
-    return projectname, projectdirectory, imagedirectory
-
 
 class SetupData:
     def __init__(self, parseobj, **kwargs):
@@ -79,7 +67,7 @@ def setup_parser():
     parser_proxy.add_argument("-i", "--inventory",
                         help="Inventory filename")
     parser_proxy.add_argument("-f", "--figures",
-                        default="",
+                        default="images/",
                         help="Proxy image folder")
     parser_proxy.add_argument("-t", "--type",
                         help="Input type")
@@ -106,7 +94,7 @@ def setup_parser():
                               default="template.tex",
                               help="template file")
     parser_proxy.add_argument("--specific-edition",
-                              action="store_false",
+                              action="store_true",
                               help="Flag to indicate card edition is important for proxies")
     parser_proxy.add_argument("--include-basics",
                               action="store_true",
@@ -118,20 +106,15 @@ def setup_parser():
 
 
 def main():
-    PROJECTNAME = 'proxylist'
-    PROJECTDIR = os.path.expanduser('~/' + PROJECTNAME + '/')
-    projectname, projectdirectory, imagedirectory = setup(PROJECTNAME, PROJECTDIR)
-
     parser = setup_parser()
-    parser.parse_args(["proxy", "-h"])
-    args = parser.parse_args(
-        ["proxy", os.path.expanduser("~/proxylist/racing_dwarves.dck"), "main.tex", "--specific-edition", "--cutcol", "white", "--cutthick", "0.5"])
+    args = parser.parse_args()
     inv = deck.Deck()
     if args.inventory is not None:
         print('Loading inventory ({0})...'.format(args.inventory))
         with open(args.inventory) as file:
             inv.load(file, args.inventory_readfunc)
         print("done!")
+    print(inv.full_deck[card.Card("smuggler's copter", "kld")])
 
     dck = deck.Deck()
     print('Loading deck ({0})...'.format(args.input))
@@ -139,10 +122,10 @@ def main():
         dck.load(f, args.readfunc)
     print("done!")
 
-    if not args.specific_edition:
+    if args.specific_edition:
         dck = deck.Deck(*dck.remove_version())
 
-    if not args.include_basics:
+    if args.include_basics:
         proxies = deck.remove_basic_lands(dck)
     else:
         proxies = dck

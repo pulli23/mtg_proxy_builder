@@ -1,7 +1,6 @@
 \BLOCK{ macro tablehead()}
 \begin{table}
     \centering
-    \colorbox{\VAR{background_color}}{%
     \begin{tabu}{\BLOCK{ for _ in range(0, num_img_hor)}c\BLOCK{ if not loop.last and cut_thickness > 0} | \BLOCK{ endif }\BLOCK{ endfor }}\BLOCK{ endmacro }
 \BLOCK{ macro tableline()}
 \\\BLOCK{ if cut_thickness > 0}
@@ -10,7 +9,6 @@
 \BLOCK{ macro tablefoot()}
 
     \end{tabu}
-    }
 \end{table}\BLOCK{ endmacro }
 \documentclass{article}
 \usepackage[\VAR{paper}, \VAR{orientation}, hmargin={\VAR{hmargin}mm,\VAR{hmargin}mm}, vmargin={\VAR{vmargin}mm,\VAR{hmargin}mm}]{geometry}
@@ -37,7 +35,7 @@
 \BLOCK{ set y = 0}
 \BLOCK{ for img in images }
 \BLOCK{ set x = x + 1}
-        \includegraphics[width=\VAR{img_width}mm, height=\VAR{img_height}mm]{{"\VAR{img|replace("%","\pcnt")}"}} \BLOCK{ if not loop.last}
+        \cellcolor{\VAR{background_color}}\includegraphics[width=\VAR{img_width}mm, height=\VAR{img_height}mm]{{"\VAR{img|replace("%","\pcnt")}"}} \BLOCK{ if not loop.last}
 \BLOCK{ if x >= num_img_hor}
 \BLOCK{ set x = 0}
 \BLOCK{ set y = y + 1}
