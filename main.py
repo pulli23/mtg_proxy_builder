@@ -9,6 +9,7 @@ import paper
 import load_file
 import image_downloader as imd
 
+
 class SetupData:
     def __init__(self, parseobj, **kwargs):
         super().__init__(**kwargs)
@@ -47,7 +48,7 @@ class SetupData:
 
 class ArgumentParser(argparse.ArgumentParser):
     def error(self, message: any):
-        raise NameError(message)
+        raise argparse.ArgumentError(message)
 
     def parse_args(self, *args, **kwargs):
         r = super().parse_args(*args, **kwargs)
@@ -65,14 +66,14 @@ def setup_parser():
     parser_proxy.add_argument("output",
                               help="output latex file")
     parser_proxy.add_argument("-i", "--inventory",
-                        help="Inventory filename")
+                              help="Inventory filename")
     parser_proxy.add_argument("-f", "--figures",
-                        default="images/",
-                        help="Proxy image folder")
+                              default="images/",
+                              help="Proxy image folder")
     parser_proxy.add_argument("-t", "--type",
-                        help="Input type")
+                              help="Input type")
     parser_proxy.add_argument("--inventory-type",
-                        help="Inventory input type")
+                              help="Inventory input type")
     parser_proxy.add_argument("-p", "--paper",
                               default='a4paper',
                               help="Paper name or dimensions")
@@ -99,7 +100,7 @@ def setup_parser():
     parser_proxy.add_argument("--include-basics",
                               action="store_true",
                               help="Include basic lands in proxy list")
-    parser_proxy.add_argument("-v","--verbose",
+    parser_proxy.add_argument("-v", "--verbose",
                               action="store_true",
                               help="Verbose printing messages")
     return parser
@@ -107,7 +108,9 @@ def setup_parser():
 
 def main():
     parser = setup_parser()
-    args = parser.parse_args()
+    a = None
+
+    args = parser.parse_args(a)
     inv = deck.Deck()
     if args.inventory is not None:
         print('Loading inventory ({0})...'.format(args.inventory))
@@ -122,10 +125,10 @@ def main():
         dck.load(f, args.readfunc)
     print("done!")
 
-    if args.specific_edition:
+    if not args.specific_edition:
         dck = deck.Deck(*dck.remove_version())
 
-    if args.include_basics:
+    if not args.include_basics:
         proxies = deck.remove_basic_lands(dck)
     else:
         proxies = dck
