@@ -1,6 +1,8 @@
 import os
 import argparse
 import re
+import sys
+import logging
 
 import deck
 import card
@@ -9,21 +11,29 @@ import paper
 import load_file
 import image_downloader as imd
 
+import mylogger
+
+logger = logging.getLogger("Main")
+
 
 class SetupData:
+    def _make_normalized_path(self, other_path: str) -> str:
+        return os.path.normpath(os.path.join(self.project_directory, other_path))
+
     def __init__(self, parseobj, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
         for a in vars(parseobj):
             setattr(self, a, getattr(parseobj, a))
 
         self.input = os.path.normpath(self.input)
         self.project_directory = os.path.dirname(self.input)
         if not os.path.isabs(self.output):
-            self.output = os.path.normpath(os.path.join(self.project_directory, self.output))
+            self.output = self._make_normalized_path(self.output)
         if self.inventory is not None and not os.path.isabs(self.inventory):
-            self.inventory = os.path.normpath(os.path.join(self.project_directory, self.inventory))
+            self.inventory = [self._make_normalized_path(i) for i in
+                              str(self.inventory).split(";")]
         if not os.path.isabs(self.figures):
-            self.figures = os.path.normpath(os.path.join(self.project_directory, self.figures))
+            self.figures = self._make_normalized_path(self.figures)
         all_type_reverse_keys = {load_file.read_csv: ("csv", "deckbox"),
                                  load_file.read_txt: ("txt", "text", "plain"),
                                  load_file.read_xmage_deck: ("xmage",)}
@@ -37,13 +47,13 @@ class SetupData:
         else:
             try:
                 self.inventory_readfunc = all_type_keys[self.inventory_type]
-            except:
+            except KeyError:
                 self.inventory_readfunc = load_file.read_any_file
-        mo = re.fullmatch(r"(\d+)x(\d+)", self.paper)
+        mo = re.fullmatch(r"(\d+)x(\d+)", str(self.paper))
         if mo:
             self.paper = paper.Paper(width=mo[1], height=mo[2], margins=self.margins)
         else:
-            self.paper = paper.Paper(name=self.paper, margins=self.margins)
+            self.paper = paper.Paper(name=str(self.paper), margins=self.margins)
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -106,24 +116,41 @@ def setup_parser():
     return parser
 
 
-def main():
-    parser = setup_parser()
-    a = None
+def safe_load(fname: str, readfunc: load_file.ReadFuncTy):
 
-    args = parser.parse_args(a)
-    inv = deck.Deck()
-    if args.inventory is not None:
-        print('Loading inventory ({0})...'.format(args.inventory))
-        with open(args.inventory) as file:
-            inv.load(file, args.inventory_readfunc)
+    print('Loading deck ({0})...'.format(fname))
+    try:
+        dck = deck.Deck()
+        with open(fname) as f:
+            dck.load(f, readfunc)
+    except ValueError as e:
+        logger.error("While handling file {1} "
+                     "the following errors occured:\n - {0};".format('\n - '.join(e.args),
+                                                                     os.path.abspath(fname)))
+    except (FileNotFoundError, IsADirectoryError):
+        logger.error("file {0} does not exist".format(os.path.abspath(fname)))
+    except PermissionError:
+        logger.error("No permission to open {0}".format(os.path.abspath(fname)))
+    except OSError:
+        logger.error("General failure to open {0}".format(os.path.abspath(fname)))
+    except BaseException:
+        raise
+    else:
         print("done!")
-    print(inv.full_deck[card.Card("smuggler's copter", "kld")])
+        return dck
 
-    dck = deck.Deck()
-    print('Loading deck ({0})...'.format(args.input))
-    with open(args.input) as f:
-        dck.load(f, args.readfunc)
-    print("done!")
+
+def main(a=None):
+    parser = setup_parser()
+    args = parser.parse_args(a)
+
+    if args.inventory is not None:
+        all_inv = [safe_load(i, args.inventory_readfunc) for i in args.inventory]
+        combined_inv = sum(all_inv)
+    else:
+        combined_inv = deck.Deck();
+
+    dck = safe_load(args.input, args.readfunc)
 
     if not args.specific_edition:
         dck = deck.Deck(*dck.remove_version())
@@ -133,7 +160,7 @@ def main():
     else:
         proxies = dck
 
-    proxies = deck.exclude_inventory(proxies, inv)
+    proxies = deck.exclude_inventory(proxies, combined_inv)
     if args.verbose:
         print("PROXY LIST")
         print(proxies)

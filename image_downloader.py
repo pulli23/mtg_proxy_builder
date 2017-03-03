@@ -9,6 +9,10 @@ import errno
 
 import deck
 import card
+import logging
+
+import mylogger
+logger = mylogger.MAINLOGGER
 
 
 def find_image(card: card.Card, source: str = "http://magiccards.info") -> str:
@@ -20,16 +24,18 @@ def find_image(card: card.Card, source: str = "http://magiccards.info") -> str:
     res = requests.get(source + "/query", payload)
     res.raise_for_status()
     print('.', end='')
-    matchiter = re.finditer(r'img\s+src="({0}/scans/[^"\s]+)"\s+alt="([^"]*)"'.format(re.escape(source)), res.text)
-
-    matchobj = max(((difflib.SequenceMatcher(None, mo.group(2).lower(), card.name.lower()).ratio(), mo)
-                 for mo in matchiter), key=operator.itemgetter(0))[1]
+    searchstr = r'img\s+src="({0}/scans/[^"\s]+)"\s+alt="([^"]*)"'.format(re.escape(source))
+    matchiter = re.finditer(searchstr, res.text)
+    t = ((difflib.SequenceMatcher(None, mo.group(2).lower(), card.name.lower()).ratio(), mo)
+         for mo in matchiter)
+    matchobj = max(t, key=operator.itemgetter(0))[1]
     print('.', end='')
     return matchobj.group(1)
 
 
 def get_all_images(names: deck.Deck, output_directory: str) -> Dict[card.Card, str]:
     print("Loading images...")
+    print(os.path.abspath(output_directory))
     outnames = {}
     # outcounter = Counter()
     view = sorted(names.full_deck.items(), key=lambda x: (x[0].name, x[0].version), reverse=True)
@@ -40,13 +46,12 @@ def get_all_images(names: deck.Deck, output_directory: str) -> Dict[card.Card, s
                 pass
             else:
                 try:
-
                     print("\rdownloading {0}".format(card), end='')
                     outname = get_image(card, output_directory)
                     outnames[card] = outname
                     # outcounter.update(num * (card,))
-                except (requests.exceptions.HTTPError, StopIteration):
-                    print(card, "not found")
+                except (requests.exceptions.HTTPError, ValueError):
+                    logger.warning("\n{0} not found".format(card))
     print("\ndone!")
     return outnames
 
@@ -64,8 +69,9 @@ def get_image(card: card.Card, output_directory: str) -> str:
 
     outname = name_to_fname(card.name)
     try:
-        prog = re.compile(outname + (r"\[{0}\]".format(card.version) if card.version else r"(\[[^]]+?\])?"),
-                          flags=re.IGNORECASE)
+        prog = re.compile(
+            outname + (r"\[{0}\]".format(card.version) if card.version else r"(\[[^]]+?\])?"),
+            flags=re.IGNORECASE)
         existing_fname = next(f for f in os.listdir(output_directory)
                               if os.path.isfile(os.path.join(output_directory, f)) and
                               prog.fullmatch(os.path.splitext(f)[0]))
@@ -81,4 +87,3 @@ def get_image(card: card.Card, output_directory: str) -> str:
         with open(outputfile, 'wb') as out_file:
             shutil.copyfileobj(response.raw, out_file)
         return outname
-

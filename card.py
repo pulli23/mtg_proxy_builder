@@ -8,7 +8,7 @@ class Card:
     def alike(self, other: "Card") -> bool:
         sv = MTGSET_CODES.get(self.version, self.version)
         ov = MTGSET_CODES.get(other.version, other.version)
-        return self.name == other.name and (not sv or sv == ov)
+        return self.name.lower() == other.name.lower() and (not sv or sv == ov)
 
     @property
     def name(self):

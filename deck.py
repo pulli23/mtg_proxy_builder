@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 from typing import Dict, Optional, Tuple, List, Sequence, Iterable
 
+import mylogger
 import load_file
 import output
 from card import Card
@@ -76,10 +77,12 @@ class Deck:
             )
 
         ret = []
-        s = 'Main deck ({0})\n    {1}'.format(str(self.number_cards_main()), create_liststring(self.mainboard))
+        s = 'Main deck ({0})\n    {1}'.format(self.number_cards_main(),
+                                              create_liststring(self.mainboard))
         ret.append(s)
         if len(self.sideboard) > 0:
-            d = 'Side board ({0})\n    {1}'.format(str(self.number_cards_side()), create_liststring(self.sideboard))
+            d = 'Side board ({0})\n    {1}'.format(self.number_cards_side(),
+                                                   create_liststring(self.sideboard))
             ret.append(d)
         return '\n'.join(ret)
 
@@ -154,13 +157,14 @@ class Deck:
     def output_deck(self, target, writer, *args, **kwargs) -> None:
         writer(self, target, *args, **kwargs)
 
-    def output_latex_proxies(self, fname: str, image_files: Dict[Card, str], image_directory: str = "",
+    def output_latex_proxies(self, fname: str, image_files: Dict[Card, str],
+                             image_directory: str = "",
                              template_name: str = "template.tex", **kwargs):
         writer = output.OutputLatex(image_directory, **kwargs)
         image_list = {image_files[c]: n for c, n in self.full_deck.items()}
         writer.load_image_list(image_list)
 
-        def writer_encapsulation(dck: "deck", target, *args, **kwargs):
+        def writer_encapsulation(dck: "Deck", target, *args, **kwargs):
             return writer(target, template_name, *args, **kwargs)
 
         with open(fname, "w") as f:
@@ -175,10 +179,17 @@ class Deck:
         return self
 
     def __radd__(self, other: "Deck") -> "Deck":
+        # noinspection PyTypeChecker
         if other == 0:
             return self
         else:
             return other + self
+
+    def __eq__(self, other: "Deck") -> bool:
+        return self.mainboard == other.mainboard and self.sideboard == other.sideboard
+
+    def __hash__(self) -> int:
+        return hash((self.mainboard, self.sideboard))
 
     def contains_variant(self, item):
         return any(item.alike(other) for other in self.full_deck)
@@ -201,10 +212,10 @@ def remove_basic_lands(dck: Deck, basics: Optional[Iterable[Card]] = None) -> De
     else:
         lands = basics
     for i in outdck.mainboard:
-        if any(i.name == j.name for j in lands):
+        if any(i.name.lower() == j.name for j in lands):
             outdck.mainboard[i] = 0
     for i in outdck.sideboard:
-        if any(i.name == j.name for j in lands):
+        if any(i.name.lower() == j.name for j in lands):
             outdck.sideboard[i] = 0
     outdck._mainboard += Counter()
     outdck._sideboard += Counter()
@@ -226,7 +237,7 @@ def exclude_inventory(dck: Deck, inventory: Deck) -> Deck:
                 onum = num
                 num -= min(num_owned - num_skipped, num)
                 outskipped[card] = min(num_owned, num_skipped + num)
-                print("skipped {0} {1}".format(onum - num, card))
+                mylogger.MAINLOGGER.info("skipped {0} {1}".format(onum - num, card))
             if num > 0:
                 if card in dck.mainboard:
                     main_out[card] += num

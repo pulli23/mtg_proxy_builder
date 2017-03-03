@@ -1,19 +1,25 @@
 import csv
 import io
 import _io
-from typing import Optional, Callable, List, Tuple, Any, TypeVar, Callable, Iterable, Sequence
+from typing import Optional, Callable, List, Tuple
+from typing import Any, TypeVar, Iterable, Sequence, Union
 import itertools
 import operator
 import re
 
+import mylogger
 from card import Card
 
 CardCountTy = Tuple[Card, int]
 CardCountSecTy = Tuple[Card, int, bool]
 CardListTy = List[CardCountTy]
+LineStrFuncTy = Callable[[str], Optional[CardCountSecTy]]
+LineCsvFuncTy = Callable[[Tuple[str, ...]], Optional[CardCountSecTy]]
+ReadFuncTy = Callable[[io.TextIOBase], Tuple[CardListTy, CardListTy]]
 
 
-def read_file(file: Iterable, line_process: Callable[[], Optional[CardCountSecTy]], *args, **kwargs) \
+def read_file(file: Iterable, line_process: Callable[[], Optional[CardCountSecTy]],
+              *args, **kwargs) \
         -> Tuple[CardListTy, CardListTy]:
     inputlist = (line_process(row, *args, **kwargs) for row in file)
     inputlist = list(filter(None, inputlist))
@@ -51,14 +57,14 @@ def process_deckbox_inventory_row(row: Tuple[str, ...]) -> Optional[CardCountTy]
         return None
 
 
-def read_inventory_deckbox_org(file: io.IOBase, *args, **kwargs) \
+def read_inventory_deckbox_org(file: io.TextIOBase, *args, **kwargs) \
         -> CardListTy:
     return read_csv(file, name_column=2, count_column=0,
                     section_column=None, version_column=3,
                     *args, **kwargs)[0]
 
 
-def read_csv(file: io.IOBase, name_column:int=1, count_column:int=0,
+def read_csv(file: io.TextIOBase, name_column:int=1, count_column:int=0,
              section_column:Optional[int]=2, version_column:Optional[int]=None, *args, **kwargs) \
         -> Tuple[CardListTy, CardListTy]:
     csvreader = csv.reader(file, *args, **kwargs)
@@ -111,7 +117,7 @@ class HandleTextline:
                     else:
                         name = mo.group(3)
                         version = mo.group(4)[1:-1]
-                    return Card(name, version), num, self.loading_main
+                    return Card(name.lower(), version.lower()), num, self.loading_main
             else:
                 self.loading_main = False
         else:
@@ -119,7 +125,7 @@ class HandleTextline:
         return None
 
 
-def read_txt(file: io.IOBase, line_reader: Optional[Callable[[str], Optional[CardCountSecTy]]] = None) \
+def read_txt(file: io.TextIOBase, line_reader: Optional[LineStrFuncTy] = None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleTextline()
@@ -148,7 +154,11 @@ class HandleXmageLine:
             version = mo.group(4)
             return Card(name, version), num, sb
         return None
-
+import io
+def mytest(file):
+    io.BytesIO()
+    file.read()
+    file.flush()
 
 def read_xmage_deck(file: io.IOBase, line_reader: Optional[Callable[[str], Optional[CardCountSecTy]]] = None) \
         -> Tuple[CardListTy, CardListTy]:
@@ -182,8 +192,7 @@ def sniff_plain(sample: Sequence) -> Callable[[str], Optional[CardCountSecTy]]:
     return h
 
 
-def sniff_reader(file: _io._TextIOBase, num: int=40) \
-        -> Callable[[io.IOBase], Tuple[CardListTy, CardListTy]]:
+def sniff_reader(file: io.TextIOBase, num: int=40) -> ReadFuncTy:
     pos = file.tell()
     header = file.readline()
     sample = header + "".join(itertools.islice(file, num - 1))  # read first N lines to sniff
@@ -195,13 +204,13 @@ def sniff_reader(file: _io._TextIOBase, num: int=40) \
             linereader = sniff_xmage(sample.splitlines())
         except ValueError:
                 linereader = sniff_plain(sample.splitlines())
-                print("Plain text guessed")
+                mylogger.MAINLOGGER.info("Plain text guessed")
                 ret = lambda line: read_txt(line, line_reader=linereader)
         else:
-            print("Xmage save file guessed")
+            mylogger.MAINLOGGER.info("Xmage save file guessed")
             ret = lambda line: read_xmage_deck(line, line_reader=linereader)
     else:
-        print("CSV input guessed")
+        mylogger.MAINLOGGER.info("CSV input guessed")
         v = csv.reader([header], dialect=dialect)
         line = list(map(str.lower, next(v)))
         count_column = line.index("count")
@@ -223,7 +232,8 @@ def sniff_reader(file: _io._TextIOBase, num: int=40) \
     file.seek(pos)
     return ret
 
-def read_any_file(file: _io._TextIOBase) \
+
+def read_any_file(file: io.TextIOBase) \
         -> Tuple[CardListTy, CardListTy]:
     reader = sniff_reader(file)
     return reader(file)
