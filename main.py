@@ -1,39 +1,65 @@
-import os
 import argparse
+import os
 import re
 import sys
-import logging
 
-import deck
-import card
-import output
-import paper
 import load_file
-import image_downloader as imd
-
 import mylogger
+import proxybuild_main
+import export_main
+from proxy import paper
 
-logger = logging.getLogger("Main")
+logger = mylogger.MAINLOGGER
 
 
+# noinspection PyAttributeOutsideInit
 class SetupData:
     def _make_normalized_path(self, other_path: str) -> str:
         return os.path.normpath(os.path.join(self.project_directory, other_path))
 
-    def __init__(self, parseobj, **kwargs):
+    def _load_deck_list_directory(self, uri: str):
+        self.alldecks.extend(os.path.join(uri, f) for f in os.listdir(uri)
+                             if os.path.isfile(os.path.join(uri, f)))
+
+    def _load_decklist_file(self, uri: str):
+        with open(uri) as f:
+            self.alldecks.extend(line.strip() for line in f if line.strip())
+
+    def _load_decklist(self, uri: str):
+        if os.path.isdir(uri):
+            self._load_deck_list_directory(uri)
+        elif os.path.isfile(uri):
+            self._load_decklist_file(uri)
+
+    def __init__(self, parseobj: argparse.ArgumentParser):
         super().__init__()
         for a in vars(parseobj):
             setattr(self, a, getattr(parseobj, a))
+        if self.verbose:
+            logger.verbose = True
+        {
+            "proxy": self.setup_proxy,
+            "export": self.setup_export
+        }.get(self.cmd)()
 
+    def setup_proxy(self):
         self.input = os.path.normpath(self.input)
         self.project_directory = os.path.dirname(self.input)
         if not os.path.isabs(self.output):
             self.output = self._make_normalized_path(self.output)
         if self.inventory is not None and not os.path.isabs(self.inventory):
-            self.inventory = [self._make_normalized_path(i) for i in
-                              str(self.inventory).split(";")]
+            self.inventory = [i if os.path.isabs(i) else self._make_normalized_path(i)
+                              for i in self.inventory.split(";")]
+
         if not os.path.isabs(self.figures):
             self.figures = self._make_normalized_path(self.figures)
+        if self.alldecks is not None:
+            alldecks_list = [i if os.path.isabs(i) else self._make_normalized_path(i)
+                             for i in self.alldecks.split(";")]
+            self.alldecks = []
+            for d in alldecks_list:
+                self._load_decklist(d)
+
         all_type_reverse_keys = {load_file.read_csv: ("csv", "deckbox"),
                                  load_file.read_txt: ("txt", "text", "plain"),
                                  load_file.read_xmage_deck: ("xmage",)}
@@ -49,34 +75,67 @@ class SetupData:
                 self.inventory_readfunc = all_type_keys[self.inventory_type]
             except KeyError:
                 self.inventory_readfunc = load_file.read_any_file
+        if self.alldecks_type is None:
+            self.alldecks_readfunc = self.readfunc
+        else:
+            try:
+                self.alldecks_readfunc = all_type_keys[self.alldecks_type]
+            except KeyError:
+                self.alldecks_readfunc = load_file.read_any_file
+
         mo = re.fullmatch(r"(\d+)x(\d+)", str(self.paper))
         if mo:
             self.paper = paper.Paper(width=mo[1], height=mo[2], margins=self.margins)
         else:
             self.paper = paper.Paper(name=str(self.paper), margins=self.margins)
+        self.cmd = proxybuild_main.build_proxies
+
+    def setup_export(self):
+        self.input = os.path.normpath(self.input)
+        if not os.path.isabs(self.output):
+            self.output = self._make_normalized_path(self.output)
+    cmd = export_main.export_deck
 
 
 class ArgumentParser(argparse.ArgumentParser):
+    def _get_action_from_name(self, name):
+        """Given a name, get the Action instance registered with this parser.
+        If only it were made available in the ArgumentError object. It is
+        passed as it's first arg...
+        """
+        container = self._actions
+        if name is None:
+            return None
+        for action in container:
+            if '/'.join(action.option_strings) == name:
+                return action
+            elif action.metavar == name:
+                return action
+            elif action.dest == name:
+                return action
+
     def error(self, message: any):
-        raise argparse.ArgumentError(message)
+        exc = sys.exc_info()[1]
+        if exc:
+            exc.argument = self._get_action_from_name(exc.argument_name)
+            raise exc
+        super(ArgumentParser, self).error(message)
 
     def parse_args(self, *args, **kwargs):
         r = super().parse_args(*args, **kwargs)
         return SetupData(r)
 
 
-def setup_parser():
-    parser = ArgumentParser(description="Process mtg decks")
-    subparsers = parser.add_subparsers(help="Action to do with the deck")
-    parser_proxy = subparsers.add_parser("proxy",
-                                         help="create a proxy deck")
-    parser_proxy.set_defaults(cmd="proxy")
+def setup_proxy_parser(parser_proxy: argparse.ArgumentParser):
     parser_proxy.add_argument("input",
                               help="Input deck filename")
     parser_proxy.add_argument("output",
                               help="output latex file")
     parser_proxy.add_argument("-i", "--inventory",
                               help="Inventory filename")
+    parser_proxy.add_argument("--alldecks",
+                              help="Either folder containing all other decks, "
+                                   "or file containing list of decks")
     parser_proxy.add_argument("-f", "--figures",
                               default="images/",
                               help="Proxy image folder")
@@ -84,6 +143,8 @@ def setup_parser():
                               help="Input type")
     parser_proxy.add_argument("--inventory-type",
                               help="Inventory input type")
+    parser_proxy.add_argument("--alldecks-type",
+                              help="all other decks input type")
     parser_proxy.add_argument("-p", "--paper",
                               default='a4paper',
                               help="Paper name or dimensions")
@@ -110,72 +171,40 @@ def setup_parser():
     parser_proxy.add_argument("--include-basics",
                               action="store_true",
                               help="Include basic lands in proxy list")
-    parser_proxy.add_argument("-v", "--verbose",
+
+
+def setup_export_parser(parser_export: argparse.ArgumentParser):
+    parser_export.add_argument("input",
+                               help="Input deck filename")
+    parser_export.add_argument("output",
+                               help="output deck file")
+    parser_export.add_argument("outtype",
+                               help="output type")
+    parser_export.add_argument("-t", "--intype",
+                               help="Input type")
+
+
+def setup_parser():
+    parser = ArgumentParser(description="Process mtg decks")
+    subparsers = parser.add_subparsers(help="Action to do with the deck")
+    parser_proxy = subparsers.add_parser("proxy",
+                                         help="create a proxy deck")
+    parser_proxy.set_defaults(cmd="proxy")
+    setup_proxy_parser(parser_proxy)
+    parser_export = subparsers.add_parser("export",
+                                          help="export deck as new file")
+    parser_export.set_defaults(cmd="export")
+    setup_export_parser(parser_export)
+    parser.add_argument("-v", "--verbose",
                               action="store_true",
                               help="Verbose printing messages")
     return parser
 
 
-def safe_load(fname: str, readfunc: load_file.ReadFuncTy):
-
-    print('Loading deck ({0})...'.format(fname))
-    try:
-        dck = deck.Deck()
-        with open(fname) as f:
-            dck.load(f, readfunc)
-    except ValueError as e:
-        logger.error("While handling file {1} "
-                     "the following errors occured:\n - {0};".format('\n - '.join(e.args),
-                                                                     os.path.abspath(fname)))
-    except (FileNotFoundError, IsADirectoryError):
-        logger.error("file {0} does not exist".format(os.path.abspath(fname)))
-    except PermissionError:
-        logger.error("No permission to open {0}".format(os.path.abspath(fname)))
-    except OSError:
-        logger.error("General failure to open {0}".format(os.path.abspath(fname)))
-    except BaseException:
-        raise
-    else:
-        print("done!")
-        return dck
-
-
 def main(a=None):
     parser = setup_parser()
     args = parser.parse_args(a)
-
-    if args.inventory is not None:
-        all_inv = [safe_load(i, args.inventory_readfunc) for i in args.inventory]
-        combined_inv = sum(all_inv)
-    else:
-        combined_inv = deck.Deck();
-
-    dck = safe_load(args.input, args.readfunc)
-
-    if not args.specific_edition:
-        dck = deck.Deck(*dck.remove_version())
-
-    if not args.include_basics:
-        proxies = deck.remove_basic_lands(dck)
-    else:
-        proxies = dck
-
-    proxies = deck.exclude_inventory(proxies, combined_inv)
-    if args.verbose:
-        print("PROXY LIST")
-        print(proxies)
-
-    image_fnames = imd.get_all_images(proxies, args.figures)
-    rel_fig_dir = os.path.relpath(args.figures, os.path.dirname(args.output))
-    if rel_fig_dir == ".":
-        rel_fig_dir = ""
-    proxies.output_latex_proxies(args.output, image_fnames, rel_fig_dir, args.template,
-                                 mypaper=args.paper,
-                                 cut_color=args.cutcol,
-                                 cut_thickness=args.cutthick,
-                                 card_dimensions=None,
-                                 background_colour=args.background
-                                 )
+    args.cmd(args)
 
 
 if __name__ == "__main__":

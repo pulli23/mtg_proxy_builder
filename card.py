@@ -1,14 +1,17 @@
+from typing import AnyStr
+
+
 class Card:
     __slots__ = ["_version", "_name"]
 
-    def __init__(self, name: str, version: str = ""):
+    def __init__(self, name: AnyStr, version: AnyStr = ""):
         self._name = name
         self._version = version
 
     def alike(self, other: "Card") -> bool:
         sv = MTGSET_CODES.get(self.version, self.version)
         ov = MTGSET_CODES.get(other.version, other.version)
-        return self.name.lower() == other.name.lower() and (not sv or sv == ov)
+        return self.name.lower() == other.name.lower() and (not sv or not ov or sv == ov)
 
     @property
     def name(self):
@@ -18,21 +21,21 @@ class Card:
     def version(self):
         return self._version
 
-    def __eq__(self, other):
+    def __eq__(self, other: "Card") -> bool:
         return isinstance(other, self.__class__) \
                and self.name == other.name and self.version == other.version
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.name, self.version))
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.version == "":
             return self.name
         else:
-            return self.name + " [" + self.version + "]"
+            return "{0} [{1}]".format(self.name, self.version)
 
-    def __repr__(self):
-        return type(self).__name__ + "(name=" + repr(self.name) + ", " + "version=" + repr(self.version) + ")"
+    def __repr__(self) -> str:
+        return "{0}(name={1}, version={2})".format(type(self).__name__, self.name, self.version)
 
 
 # start

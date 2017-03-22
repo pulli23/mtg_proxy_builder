@@ -1,11 +1,10 @@
 import csv
 import io
-import _io
-from typing import Optional, Callable, List, Tuple
-from typing import Any, TypeVar, Iterable, Sequence, Union
 import itertools
 import operator
 import re
+from typing import Iterable, Sequence, AnyStr
+from typing import Optional, Callable, List, Tuple
 
 import mylogger
 from card import Card
@@ -30,15 +29,15 @@ def read_file(file: Iterable, line_process: Callable[[], Optional[CardCountSecTy
     return t[0], t[1]
 
 
-def process_deckbox_deck_row(row: Tuple[str, ...]) -> Optional[CardCountSecTy]:
+def process_deckbox_deck_row(row: Tuple[AnyStr, ...]) -> Optional[CardCountSecTy]:
     try:
         return Card(row[1].lower()), int(row[0]), True if row[2].lower() == "main" else False
     except (ValueError, IndexError):
         return None
 
 
-def process_csv_row(row: Tuple[str, ...], name_column: int, count_column: int,
-                    version_column: Optional[int]=None, section_column: Optional[int]=None) \
+def process_csv_row(row: Tuple[AnyStr, ...], name_column: int, count_column: int,
+                    version_column: int = None, section_column: int = None) \
         -> Optional[CardCountSecTy]:
     try:
         v = row[version_column].lower() if version_column is not None else ""
@@ -50,7 +49,7 @@ def process_csv_row(row: Tuple[str, ...], name_column: int, count_column: int,
         return None
 
 
-def process_deckbox_inventory_row(row: Tuple[str, ...]) -> Optional[CardCountTy]:
+def process_deckbox_inventory_row(row: Tuple[AnyStr, ...]) -> Optional[CardCountTy]:
     try:
         return Card(row[2].lower(), row[3].lower()), int(row[0])
     except (ValueError, IndexError):
@@ -64,8 +63,9 @@ def read_inventory_deckbox_org(file: io.TextIOBase, *args, **kwargs) \
                     *args, **kwargs)[0]
 
 
-def read_csv(file: io.TextIOBase, name_column:int=1, count_column:int=0,
-             section_column:Optional[int]=2, version_column:Optional[int]=None, *args, **kwargs) \
+def read_csv(file: io.TextIOBase, name_column: int = 1, count_column: int = 0,
+             section_column: int = None, version_column: int = None, *args,
+             **kwargs) \
         -> Tuple[CardListTy, CardListTy]:
     csvreader = csv.reader(file, *args, **kwargs)
     return read_file(csvreader, lambda line: process_csv_row(line,
@@ -77,13 +77,14 @@ def read_csv(file: io.TextIOBase, name_column:int=1, count_column:int=0,
 
 
 class HandleTextline:
-    def __init__(self, mb_check: Optional[str] = r"main(\s*(board|deck))?\s*([([{<]\d+[]>})]\s*)?:?",
-                 sb_check: Optional[str] = r"^side(\s*board)?\s*([([{]\d+[]})]\s*)?:?",
-                 line_check: Optional[str] = None):
+    def __init__(self, mb_check: str = r"main(\s*(board|deck))?\s*([([{<]\d+[]>})]\s*)?:?",
+                 sb_check: str = r"^side(\s*board)?\s*([([{]\d+[]})]\s*)?:?",
+                 line_check: str = None):
         if line_check is None:
             version_part = r"\[[^]]+?\]"
             name_part = r"[^]0-9[\s](?:[^]0-9[]*[^]0-9[\s])?"
-            line_check = r"(\d+)\s+(({0})\s+({1})|({1})\s+({0})|({0}))".format(name_part, version_part)
+            line_check = r"(\d+)\s+(({0})\s+({1})|({1})\s+({0})|({0}))".format(name_part,
+                                                                               version_part)
         self.prog_line = re.compile(line_check, re.IGNORECASE)
         self.prog_main = re.compile(mb_check, re.IGNORECASE)
         self.prog_side = re.compile(sb_check, re.IGNORECASE)
@@ -93,39 +94,40 @@ class HandleTextline:
     def sniff(self, line: str) -> bool:
         line = line.strip()
         if line and \
-            re.match(self.prog_main, line) is None and \
-            re.match(self.prog_side, line) is None and \
-            re.fullmatch(self.prog_line, line) is None:
+                        re.match(self.prog_main, line) is None and \
+                        re.match(self.prog_side, line) is None and \
+                        re.fullmatch(self.prog_line, line) is None:
             return False
         else:
             return True
 
     def __call__(self, line: str) -> Optional[CardCountSecTy]:
         line = line.strip()
-        if re.match(self.prog_main, line) is None:
-            if re.match(self.prog_side, line) is None:
-                mo = re.fullmatch(self.prog_line, line)
-                if mo is not None:
-                    num = int(mo.group(1))
-                    if mo.group(3) is None:
-                        if mo.group(6) is None:
-                            name = mo.group(7)
-                            version = ""
-                        else:
-                            name = mo.group(6)
-                            version = mo.group(5)[1:-1]
-                    else:
-                        name = mo.group(3)
-                        version = mo.group(4)[1:-1]
-                    return Card(name.lower(), version.lower()), num, self.loading_main
-            else:
-                self.loading_main = False
-        else:
+        if re.match(self.prog_main, line) is not None:
             self.loading_main = True
-        return None
+            return
+
+        if re.match(self.prog_side, line) is not None:
+            self.load_main = False
+            return
+
+        mo = re.fullmatch(self.prog_line, line)
+        if mo is not None:
+            num = int(mo.group(1))
+            if mo.group(3) is None:
+                if mo.group(6) is None:
+                    name = mo.group(7)
+                    version = ""
+                else:
+                    name = mo.group(6)
+                    version = mo.group(5)[1:-1]
+            else:
+                name = mo.group(3)
+                version = mo.group(4)[1:-1]
+            return Card(name.lower(), version.lower()), num, self.loading_main
 
 
-def read_txt(file: io.TextIOBase, line_reader: Optional[LineStrFuncTy] = None) \
+def read_txt(file: io.TextIOBase, line_reader: LineStrFuncTy = None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleTextline()
@@ -140,7 +142,7 @@ class HandleXmageLine:
             line_check = r"(SB:)?\s*(\d+)\s*({1})\s\s*({0})".format(name_part, version_part)
         self.prog_line = re.compile(line_check, re.IGNORECASE)
 
-    def get_match_object(self, line:str):
+    def get_match_object(self, line: str):
         line = line.strip().lower()
         mo = re.fullmatch(self.prog_line, line)
         return mo
@@ -154,13 +156,10 @@ class HandleXmageLine:
             version = mo.group(4)
             return Card(name, version), num, sb
         return None
-import io
-def mytest(file):
-    io.BytesIO()
-    file.read()
-    file.flush()
 
-def read_xmage_deck(file: io.IOBase, line_reader: Optional[Callable[[str], Optional[CardCountSecTy]]] = None) \
+
+def read_xmage_deck(file: io.IOBase,
+                    line_reader: Callable[[str], Optional[CardCountSecTy]] = None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleXmageLine()
@@ -171,7 +170,8 @@ def sniff_xmage(sample: Sequence) -> Callable[[str], Optional[CardCountSecTy]]:
     midlines = HandleXmageLine()
     firstline = HandleXmageLine("name:.*")
     version_part = r"\[([\d\w]{3}):\d+\]"
-    layout_regex = r"\(\d+,\d+\)\([\w_]+,(true|false)(,\d+)?\)\|(\(({0}(,{0})*)?\))*".format(version_part)
+    layout_regex = r"\(\d+,\d+\)\([\w_]+,(true|false)(,\d+)?\)\|(\(({0}(,{0})*)?\))*".format(
+        version_part)
     last_lines = HandleXmageLine("layout (main|sideboard):" + layout_regex)
     match_order = [firstline, midlines, last_lines]
     current = 0
@@ -192,7 +192,7 @@ def sniff_plain(sample: Sequence) -> Callable[[str], Optional[CardCountSecTy]]:
     return h
 
 
-def sniff_reader(file: io.TextIOBase, num: int=40) -> ReadFuncTy:
+def sniff_reader(file: io.TextIOBase, num: int = 40) -> ReadFuncTy:
     pos = file.tell()
     header = file.readline()
     sample = header + "".join(itertools.islice(file, num - 1))  # read first N lines to sniff
@@ -203,9 +203,9 @@ def sniff_reader(file: io.TextIOBase, num: int=40) -> ReadFuncTy:
         try:
             linereader = sniff_xmage(sample.splitlines())
         except ValueError:
-                linereader = sniff_plain(sample.splitlines())
-                mylogger.MAINLOGGER.info("Plain text guessed")
-                ret = lambda line: read_txt(line, line_reader=linereader)
+            linereader = sniff_plain(sample.splitlines())
+            mylogger.MAINLOGGER.info("Plain text guessed")
+            ret = lambda line: read_txt(line, line_reader=linereader)
         else:
             mylogger.MAINLOGGER.info("Xmage save file guessed")
             ret = lambda line: read_xmage_deck(line, line_reader=linereader)

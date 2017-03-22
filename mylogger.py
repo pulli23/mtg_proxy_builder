@@ -1,53 +1,58 @@
-from typing import Optional, AnyStr, Union
+from typing import AnyStr, Union
 import logging
 import sys
 
 
 class Logger(logging.Logger):
-    VERBOSE_LOGGING = False
-
-    def __init__(self, name: Optional[AnyStr] = None, verbose: Optional[bool] = None,
+    def __init__(self, name: AnyStr = None, verbose: bool = None,
                  *args, **kwargs):
         if verbose is None:
-            verbose = Logger.VERBOSE_LOGGING
+            verbose = False
         super().__init__(name, *args, **kwargs)
         self.verbose = verbose
 
-    def log(self, level: Union[AnyStr, int], msg: str, verbose_msg: Optional[str] = None,
+    def log(self, level: Union[AnyStr, int], msg: AnyStr = None,
+            verbose_msg: AnyStr = None,
             *args, **kwargs):
-        if self.verbose:
+        if msg is not None:
+            super().log(level, msg, *args, **kwargs)
+        if self.verbose and verbose_msg is not None:
             super().log(level, verbose_msg, *args, **kwargs)
-        super().log(level, msg, *args, **kwargs)
 
-    def info(self, msg: str, verbose_msg: Optional[str] = None,
+    def info(self, msg: AnyStr = None, verbose_msg: AnyStr = None,
              *args, **kwargs):
-        if self.verbose:
+        if msg is not None:
+            super().info(msg, *args, **kwargs)
+        if self.verbose and verbose_msg is not None:
             super().info(verbose_msg, *args, **kwargs)
-        super().info(msg, *args, **kwargs)
 
-    def debug(self, msg: str, verbose_msg: Optional[str] = None,
+    def debug(self, msg: AnyStr = None, verbose_msg: AnyStr = None,
               *args, **kwargs):
-        if self.verbose:
+        if msg is not None:
+            super().debug(msg, *args, **kwargs)
+        if self.verbose and verbose_msg is not None:
             super().debug(verbose_msg, *args, **kwargs)
-        super().debug(msg, *args, **kwargs)
 
-    def warning(self, msg: str, verbose_msg: Optional[str] = None,
+    def warning(self, msg: AnyStr = None, verbose_msg: AnyStr = None,
                 *args, **kwargs):
-        if self.verbose:
+        if msg is not None:
+            super().warning(msg, *args, **kwargs)
+        if self.verbose and verbose_msg is not None:
             super().warning(verbose_msg, *args, **kwargs)
-        super().warning(msg, *args, **kwargs)
 
-    def error(self, msg: str, verbose_msg: Optional[str] = None,
+    def error(self, msg: AnyStr = None, verbose_msg: AnyStr = None,
               *args, **kwargs):
-        if self.verbose:
+        if msg is not None:
+            super().error(msg, *args, **kwargs)
+        if self.verbose and verbose_msg is not None:
             super().error(verbose_msg, *args, **kwargs)
-        super().error(msg, *args, **kwargs)
 
-    def critical(self, msg: str, verbose_msg: Optional[str] = None,
+    def critical(self, msg: AnyStr = None, verbose_msg: AnyStr = None,
                  *args, **kwargs):
-        if self.verbose:
+        if msg is not None:
+            super().critical(msg, *args, **kwargs)
+        if self.verbose and verbose_msg is not None:
             super().critical(verbose_msg, *args, **kwargs)
-        super().critical(msg, *args, **kwargs)
 
 
 class LessThanFilter(logging.Filter):
@@ -56,7 +61,6 @@ class LessThanFilter(logging.Filter):
         self.max_level = exclusive_maximum
 
     def filter(self, record):
-        #non-zero return means we log this message
         return True if record.levelno < self.max_level else False
 
 logging.setLoggerClass(Logger)
@@ -66,7 +70,7 @@ MAINLOGGER = logging.getLogger("main")
 MAINLOGGER.setLevel(logging.DEBUG)
 
 logging_handler_out = logging.StreamHandler(sys.stdout)
-logging_handler_out.setLevel(logging.DEBUG)
+logging_handler_out.setLevel(logging.INFO)
 logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
 MAINLOGGER.addHandler(logging_handler_out)
 

@@ -1,10 +1,13 @@
 import math as m
 import os
-from typing import Dict, Tuple, List, Union, Optional, Iterable
+from typing import Dict, Union, Sequence
+import typing
+
 import jinja2
-import io
-from jinja2 import Template
-import paper
+
+from proxy import paper
+import mylogger
+logger = mylogger.MAINLOGGER
 
 
 class OutputLatex:
@@ -12,8 +15,8 @@ class OutputLatex:
     LANDSCAPE = "landscape"
 
     def __init__(self, image_directory: str = "", mypaper: Union[str, paper.Paper] = "a4paper",
-                 card_dimensions: Optional[Tuple[float, float]] = None, cut_thickness: float = 0,
-                 cut_color: str="black", background_color: str="black",**kwargs):
+                 card_dimensions: Sequence[float, float] = None, cut_thickness: float = 0,
+                 cut_color: str="black", background_color: str="black", **kwargs):
         self.cut_color = cut_color
         self.cut_thickness = cut_thickness
         self.background_color = background_color
@@ -50,21 +53,20 @@ class OutputLatex:
             self.cardlayout = (m.floor((y + cut_thickness) / (card_dimensions[0] + cut_thickness)),
                                m.floor((x + cut_thickness) / (card_dimensions[1] + cut_thickness)))
 
-    def save(self, target: io.TextIOBase, latexstr: str = None):
-        print("Saving latex ({0})...".format(target))
+    def save(self, target: typing.io.TextIO, latexstr: str = None):
+        logger.info("Saving latex ({0})...".format(target))
         if latexstr is None:
             if self.latexstr is None:
                 raise ValueError("Latex not generated")
             latexstr = self.latexstr
         target.write(latexstr)
-        print("Done!")
+        logger.info("Saving latex, done!")
 
     def load_image_list(self, images: Dict[str, int]):
         image_list = []
         for img, num in images.items():
             image_list.extend([os.path.join(self.image_directory, img)] * num)
         self.images = image_list
-        return image_list
 
     def create_latex(self, template_name):
         self.latexstr = self._create_latex(template_name)
@@ -106,10 +108,10 @@ class OutputLatex:
                                 cut_color=self.cut_color,
                                 background_color=self.background_color,
                                 **{**self.extra_settings, **kwargs})
-        print("Done!")
+        logger.info("Writing latex: done!")
         return lastr
 
-    def __call__(self, fileobj, template_name: str, *args, **kwargs):
+    def __call__(self, fileobj: typing.io.TextIO, template_name: str, *args, **kwargs):
         latexstr = self._create_latex(template_name)
         self.save(fileobj, latexstr)
 

@@ -1,22 +1,28 @@
-import os
 import copy
+import os
+import itertools
 from collections import Counter
-from typing import Dict, Optional, Tuple, List, Sequence, Iterable
+from typing import Dict, Tuple, List, Sequence
+from typing import Iterable, io, Callable, Any, Mapping, AnyStr
+
+
+import load_file
+import save_file
+from card import Card
+from proxy import output
 
 import mylogger
-import load_file
-import output
-from card import Card
 
 CardCountTy = Tuple[Card, int]
 CardDictTy = Dict[Card, int]
 CardListTy = List[CardCountTy]
+logger = mylogger.MAINLOGGER
 
 
 class Deck:
-    def __init__(self, mainboard: Optional[CardDictTy] = None,
-                 sideboard: Optional[CardDictTy] = None,
-                 name: str = ""):
+    def __init__(self, mainboard: CardDictTy = None,
+                 sideboard: CardDictTy = None,
+                 name: AnyStr = ""):
         self.name = name
         if mainboard is None:
             self._mainboard = Counter()
@@ -41,28 +47,28 @@ class Deck:
         return sum(self.sideboard.values())
 
     @property
-    def mainboard(self) -> Counter:
+    def mainboard(self) -> CardDictTy:
         return self._mainboard
 
     @property
-    def sideboard(self) -> Counter:
+    def sideboard(self) -> CardDictTy:
         return self._sideboard
 
     @property
-    def full_deck(self) -> Counter:
+    def full_deck(self) -> CardDictTy:
         return self._mainboard + self._sideboard
 
-    def remove_version_main(self) -> Counter:
+    def remove_version_main(self) -> CardDictTy:
         return self._remove_version(self.mainboard)
 
-    def remove_version_side(self) -> Counter:
+    def remove_version_side(self) -> CardDictTy:
         return self._remove_version(self.sideboard)
 
-    def remove_version(self) -> Tuple[Counter, Counter]:
+    def remove_version(self) -> Tuple[CardDictTy, CardDictTy]:
         return self.remove_version_main(), self.remove_version_side()
 
     @staticmethod
-    def _remove_version(count: Counter) -> Counter:
+    def _remove_version(count: CardDictTy) -> CardDictTy:
         d = Counter()
         for i, v in count.items():
             d[Card(i.name)] += v
@@ -86,7 +92,27 @@ class Deck:
             ret.append(d)
         return '\n'.join(ret)
 
-    def load(self, source, reader):
+    def guarded_load(self, fname: AnyStr, readfunc: load_file.ReadFuncTy):
+        print('Loading deck ({0})...'.format(fname))
+        try:
+            with open(fname) as f:
+                self.load(f, readfunc)
+        except ValueError as e:
+            logger.error("While handling file {1} "
+                         "the following errors occured:\n - {0};".format('\n - '.join(e.args),
+                                                                         os.path.abspath(fname)))
+        except (FileNotFoundError, IsADirectoryError):
+            logger.error("file {0} does not exist".format(os.path.abspath(fname)))
+        except PermissionError:
+            logger.error("No permission to open {0}".format(os.path.abspath(fname)))
+        except OSError:
+            logger.error("General failure to open {0}".format(os.path.abspath(fname)))
+        except BaseException:
+            raise
+        else:
+            logger.info("Loading deck, done!")
+
+    def load(self, source: io.TextIO, reader: load_file.ReadFuncTy):
         def create_counter(l: Sequence[CardCountTy]) -> Counter:
             c = Counter()
             for item in l:
@@ -97,50 +123,59 @@ class Deck:
         self._mainboard = create_counter(main)
         self._sideboard = create_counter(side)
 
-    def load_deckbox_csv(self, fname: str):
+    def load_deckbox_csv(self, fname: AnyStr):
         reader = load_file.read_csv
-        print('Loading deck ({0})...'.format(fname))
+        logger.info('Loading deck ({0})...'.format(fname))
         with open(fname) as file:
             self.load(file, reader)
-        print("done!")
+        logger.info("done!")
 
-    def load_deckbox_inventory(self, fname: str):
+    def load_deckbox_inventory(self, fname: AnyStr):
         def reader(source):
             return load_file.read_inventory_deckbox_org(source), []
 
-        print('Loading inventory ({0})...'.format(fname))
+        logger.info('Loading inventory ({0})...'.format(fname))
         with open(fname) as file:
             self.load(file, reader)
-        print("done!")
+        logger.info("done!")
 
-    def load_txt(self, fname: str):
+    def load_txt(self, fname: AnyStr):
         reader = load_file.read_txt
-        print('Loading deck ({0})...'.format(fname))
+        logger.info('Loading deck ({0})...'.format(fname))
         with open(fname) as file:
             self.load(file, reader)
-        print("done!")
+        logger.info("done!")
 
-    def load_xmage(self, fname: str):
+    def load_xmage(self, fname: AnyStr):
         reader = load_file.read_xmage_deck
-        print('Loading deck ({0})...'.format(fname))
+        logger.info('Loading deck ({0})...'.format(fname))
         with open(fname) as file:
             self.load(file, reader)
-        print("done!")
+        logger.info("done!")
 
-    def remove_card(self, card: Card, num: Optional[int] = None) -> int:
+    def save(self, outstream: io.TextIO, saver):
+        saver(outstream, self.mainboard, self.sideboard)
+
+    def save_txt(self, fname: AnyStr):
+        saver = save_file.save_txt
+        logger.info('Saving deck ({0})...'.format(fname))
+        with open(fname, 'w') as f:
+            self.save(f, saver)
+
+    def remove_card(self, card: Card, num: int = None) -> int:
         onum = self.remove_card_mainboard(card, num)
         if num is None or onum < num:
             onum += self.remove_card_sideboard(card, num)
         return onum
 
-    def remove_card_mainboard(self, card: Card, num: Optional[int] = None) -> int:
+    def remove_card_mainboard(self, card: Card, num: int = None) -> int:
         return self._remove_card_board(self._mainboard, card, num)
 
-    def remove_card_sideboard(self, card: Card, num: Optional[int] = None) -> int:
+    def remove_card_sideboard(self, card: Card, num: int = None) -> int:
         return self._remove_card_board(self._sideboard, card, num)
 
     @staticmethod
-    def _remove_card_board(test_seq, card: Card, num: Optional[int] = None) -> int:
+    def _remove_card_board(test_seq, card: Card, num: int = None) -> int:
         onum = 0
         for look_card in test_seq:
             if card.alike(look_card):
@@ -154,18 +189,22 @@ class Deck:
         test_seq += Counter()
         return onum
 
-    def output_deck(self, target, writer, *args, **kwargs) -> None:
+    def output_deck(self, target: io.TextIO,
+                    writer: Callable[["Deck", io.TextIO,
+                                      Sequence[Any], Mapping[str, Any]], None],
+                    *args, **kwargs) -> None:
         writer(self, target, *args, **kwargs)
 
     def output_latex_proxies(self, fname: str, image_files: Dict[Card, str],
                              image_directory: str = "",
                              template_name: str = "template.tex", **kwargs):
         writer = output.OutputLatex(image_directory, **kwargs)
-        image_list = {image_files[c]: n for c, n in self.full_deck.items()}
+
+        image_list = {image_files[c]: n for c, n in self.full_deck.items() if c in image_files}
         writer.load_image_list(image_list)
 
-        def writer_encapsulation(dck: "Deck", target, *args, **kwargs):
-            return writer(target, template_name, *args, **kwargs)
+        def writer_encapsulation(dck: "Deck", target, *args, **kwargs) -> None:
+            writer(target, template_name, *args, **kwargs)
 
         with open(fname, "w") as f:
             self.output_deck(f, writer=writer_encapsulation)
@@ -188,16 +227,20 @@ class Deck:
     def __eq__(self, other: "Deck") -> bool:
         return self.mainboard == other.mainboard and self.sideboard == other.sideboard
 
-    def __hash__(self) -> int:
-        return hash((self.mainboard, self.sideboard))
+    def contains_variant(self, item: Card) -> bool:
+        return any(item.alike(other)
+                   for other in itertools.chain(self.mainboard, self.sideboard))
 
-    def contains_variant(self, item):
-        return any(item.alike(other) for other in self.full_deck)
+    def __contains__(self, item: Card) -> bool:
+        return item in itertools.chain(self.mainboard, self.sideboard)
 
-    def __contains__(self, item):
-        return item in self.mainboard or item in self.sideboard
+    def find_all_copies_by_name(self, name: AnyStr, area: CardDictTy = None) \
+            -> CardListTy:
+        if area is None:
+            area = self.full_deck
+        return [(c, n) for c, n in area.items() if c.name == name]
 
-    def find_all_copies(self, item: Card, area: Optional[CardDictTy] = None) \
+    def find_all_copies(self, item: Card, area: CardDictTy = None) \
             -> CardListTy:
         if area is None:
             area = self.full_deck
@@ -205,7 +248,7 @@ class Deck:
 
 
 # noinspection PyProtectedMember
-def remove_basic_lands(dck: Deck, basics: Optional[Iterable[Card]] = None) -> Deck:
+def remove_basic_lands(dck: Deck, basics: Iterable[Card] = None) -> Deck:
     outdck = copy.deepcopy(dck)
     if basics is None:
         lands = [Card("plains"), Card("island"), Card("swamp"), Card("mountain"), Card("forest")]
@@ -237,7 +280,7 @@ def exclude_inventory(dck: Deck, inventory: Deck) -> Deck:
                 onum = num
                 num -= min(num_owned - num_skipped, num)
                 outskipped[card] = min(num_owned, num_skipped + num)
-                mylogger.MAINLOGGER.info("skipped {0} {1}".format(onum - num, card))
+                logger.debug(verbose_msg="Removed {0} {1}".format(onum - num, card))
             if num > 0:
                 if card in dck.mainboard:
                     main_out[card] += num
@@ -252,4 +295,4 @@ if __name__ == "__main__":
 
     mydeck = Deck()
     mydeck.load_deckbox_csv(os.path.join(PROJECTDIR, "input.csv"))
-    print(mydeck)
+    logger.info(mydeck)
