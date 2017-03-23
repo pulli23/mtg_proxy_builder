@@ -1,6 +1,6 @@
 import math as m
 import os
-from typing import Dict, Union, Sequence
+from typing import Dict, Union, Tuple
 import typing
 
 import jinja2
@@ -15,7 +15,7 @@ class OutputLatex:
     LANDSCAPE = "landscape"
 
     def __init__(self, image_directory: str = "", mypaper: Union[str, paper.Paper] = "a4paper",
-                 card_dimensions: Sequence[float, float] = None, cut_thickness: float = 0,
+                 card_dimensions: Tuple[float, float] = None, cut_thickness: float = 0,
                  cut_color: str="black", background_color: str="black", **kwargs):
         self.cut_color = cut_color
         self.cut_thickness = cut_thickness

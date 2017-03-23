@@ -3,11 +3,14 @@ import os
 import re
 import sys
 
+from . import export_main
+
 import load_file
 import mylogger
-import proxybuild_main
-import export_main
+import save_file
+from . import proxybuild_main
 from proxy import paper
+from proxybuilder_types import SaveFuncTy, ReadFuncTy
 
 logger = mylogger.MAINLOGGER
 
@@ -42,6 +45,37 @@ class SetupData:
             "export": self.setup_export
         }.get(self.cmd)()
 
+    @staticmethod
+    def find_readfunc(input_type: str) \
+            -> ReadFuncTy:
+        all_type_reverse_keys = {load_file.read_csv: ("csv", "deckbox"),
+                                 load_file.read_txt: ("txt", "text", "plain"),
+                                 load_file.read_xmage_deck: ("xmage",)}
+        all_type_keys = {k: fun for fun, keys in all_type_reverse_keys.items() for k in keys}
+        try:
+            return all_type_keys[input_type]
+        except KeyError:
+            return load_file.read_any_file
+
+    @staticmethod
+    def find_exportfunc(output_type: str, fname: str = "") \
+            -> SaveFuncTy:
+        all_type_reverse_keys = {save_file.save_csv: ("csv", "deckbox"),
+                                 save_file.save_txt: ("txt", "text", "plain"),
+                                 save_file.save_xmage: ("xmage",)}
+        all_type_keys = {k: fun for fun, keys in all_type_reverse_keys.items() for k in keys}
+        try:
+            return all_type_keys[output_type]
+        except KeyError:
+            if fname:
+                ext = os.path.splitext(fname)[1]
+                all_type_keys = {"csv": save_file.save_csv,
+                                 "txt": save_file.save_txt}
+                try:
+                    return all_type_keys[ext]
+                except KeyError:
+                    return save_file.save_txt
+
     def setup_proxy(self):
         self.input = os.path.normpath(self.input)
         self.project_directory = os.path.dirname(self.input)
@@ -60,28 +94,15 @@ class SetupData:
             for d in alldecks_list:
                 self._load_decklist(d)
 
-        all_type_reverse_keys = {load_file.read_csv: ("csv", "deckbox"),
-                                 load_file.read_txt: ("txt", "text", "plain"),
-                                 load_file.read_xmage_deck: ("xmage",)}
-        all_type_keys = {k: fun for fun, keys in all_type_reverse_keys.items() for k in keys}
-        try:
-            self.readfunc = all_type_keys[self.type]
-        except KeyError:
-            self.readfunc = load_file.read_any_file
+        self.readfunc = self.find_readfunc(self.type)
         if self.inventory_type is None:
             self.inventory_readfunc = self.readfunc
         else:
-            try:
-                self.inventory_readfunc = all_type_keys[self.inventory_type]
-            except KeyError:
-                self.inventory_readfunc = load_file.read_any_file
+            self.inventory_readfunc = self.find_readfunc(self.inventory_type)
         if self.alldecks_type is None:
             self.alldecks_readfunc = self.readfunc
         else:
-            try:
-                self.alldecks_readfunc = all_type_keys[self.alldecks_type]
-            except KeyError:
-                self.alldecks_readfunc = load_file.read_any_file
+            self.alldecks_readfunc = self.find_readfunc(self.alldecks_type)
 
         mo = re.fullmatch(r"(\d+)x(\d+)", str(self.paper))
         if mo:
@@ -94,7 +115,9 @@ class SetupData:
         self.input = os.path.normpath(self.input)
         if not os.path.isabs(self.output):
             self.output = self._make_normalized_path(self.output)
-    cmd = export_main.export_deck
+        self.readfunc = self.find_readfunc(self.intype)
+        self.exportfunc = self.find_exportfunc(self.outtype, self.output)
+        self.cmd = export_main.export_deck
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -178,9 +201,9 @@ def setup_export_parser(parser_export: argparse.ArgumentParser):
                                help="Input deck filename")
     parser_export.add_argument("output",
                                help="output deck file")
-    parser_export.add_argument("outtype",
+    parser_export.add_argument("--outtype",
                                help="output type")
-    parser_export.add_argument("-t", "--intype",
+    parser_export.add_argument("--intype",
                                help="Input type")
 
 

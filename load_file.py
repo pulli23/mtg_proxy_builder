@@ -3,22 +3,17 @@ import io
 import itertools
 import operator
 import re
+import typing
 from typing import Iterable, Sequence, AnyStr
-from typing import Optional, Callable, List, Tuple
+from typing import Optional, Callable, Tuple
 
 import mylogger
 from card import Card
-
-CardCountTy = Tuple[Card, int]
-CardCountSecTy = Tuple[Card, int, bool]
-CardListTy = List[CardCountTy]
-LineStrFuncTy = Callable[[str], Optional[CardCountSecTy]]
-LineCsvFuncTy = Callable[[Tuple[str, ...]], Optional[CardCountSecTy]]
-ReadFuncTy = Callable[[io.TextIOBase], Tuple[CardListTy, CardListTy]]
+from proxybuilder_types import CardCountSecTy, CardListTy, ReadLineFuncTy, CardCountTy, ReadFuncTy
 
 
-def read_file(file: Iterable, line_process: Callable[[], Optional[CardCountSecTy]],
-              *args, **kwargs) \
+def read_file(file: Iterable, line_process: ReadLineFuncTy,
+              *args: any, **kwargs: any) \
         -> Tuple[CardListTy, CardListTy]:
     inputlist = (line_process(row, *args, **kwargs) for row in file)
     inputlist = list(filter(None, inputlist))
@@ -56,14 +51,14 @@ def process_deckbox_inventory_row(row: Tuple[AnyStr, ...]) -> Optional[CardCount
         return None
 
 
-def read_inventory_deckbox_org(file: io.TextIOBase, *args, **kwargs) \
+def read_inventory_deckbox_org(file: typing.io.TextIO, *args, **kwargs) \
         -> CardListTy:
     return read_csv(file, name_column=2, count_column=0,
                     section_column=None, version_column=3,
                     *args, **kwargs)[0]
 
 
-def read_csv(file: io.TextIOBase, name_column: int = 1, count_column: int = 0,
+def read_csv(file: typing.io.TextIO, name_column: int = 1, count_column: int = 0,
              section_column: int = None, version_column: int = None, *args,
              **kwargs) \
         -> Tuple[CardListTy, CardListTy]:
@@ -127,7 +122,7 @@ class HandleTextline:
             return Card(name.lower(), version.lower()), num, self.loading_main
 
 
-def read_txt(file: io.TextIOBase, line_reader: LineStrFuncTy = None) \
+def read_txt(file: typing.io.TextIO, line_reader: ReadLineFuncTy = None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleTextline()
@@ -158,8 +153,8 @@ class HandleXmageLine:
         return None
 
 
-def read_xmage_deck(file: io.IOBase,
-                    line_reader: Callable[[str], Optional[CardCountSecTy]] = None) \
+def read_xmage_deck(file: typing.io.TextIO,
+                    line_reader: ReadLineFuncTy = None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleXmageLine()
@@ -192,7 +187,7 @@ def sniff_plain(sample: Sequence) -> Callable[[str], Optional[CardCountSecTy]]:
     return h
 
 
-def sniff_reader(file: io.TextIOBase, num: int = 40) -> ReadFuncTy:
+def sniff_reader(file: typing.io.TextIO, num: int = 40) -> ReadFuncTy:
     pos = file.tell()
     header = file.readline()
     sample = header + "".join(itertools.islice(file, num - 1))  # read first N lines to sniff
@@ -233,7 +228,7 @@ def sniff_reader(file: io.TextIOBase, num: int = 40) -> ReadFuncTy:
     return ret
 
 
-def read_any_file(file: io.TextIOBase) \
+def read_any_file(file: typing.io.TextIO) \
         -> Tuple[CardListTy, CardListTy]:
     reader = sniff_reader(file)
     return reader(file)

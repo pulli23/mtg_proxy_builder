@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Tuple
 
 
 class Paper(object):
@@ -11,7 +11,7 @@ class Paper(object):
     }
 
     def __init__(self, name: str = None, width: float = 0, height: float = 0,
-                 margins: Sequence[float, float] =None):
+                 margins: Tuple[float, float] =None):
         self.width = width
         self.height = height
         self.name = name

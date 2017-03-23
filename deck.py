@@ -12,10 +12,7 @@ from card import Card
 from proxy import output
 
 import mylogger
-
-CardCountTy = Tuple[Card, int]
-CardDictTy = Dict[Card, int]
-CardListTy = List[CardCountTy]
+from proxybuilder_types import CardCountTy, CardDictTy, CardListTy, CounterTy
 logger = mylogger.MAINLOGGER
 
 

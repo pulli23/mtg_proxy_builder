@@ -5,20 +5,10 @@ from typing import Iterable
 from typing import Optional, Callable, List, Tuple, Dict
 
 from card import Card
-
-CardCountTy = Tuple[Card, int]
-CardCountSecTy = Tuple[Card, int, bool]
-CardIterTy = Iterable[Tuple[Card, int]]
-CardDictTy = Dict[Card, int]
-CardListTy = List[CardCountTy]
-LineStrFuncTy = Callable[[str], Optional[CardCountSecTy]]
-LineCsvFuncTy = Callable[[Tuple[str, ...]], Optional[CardCountSecTy]]
-ReadFuncTy = Callable[[io.TextIOBase], Tuple[CardListTy, CardListTy]]
-
-SaveFuncTy = Callable[[io.TextIOBase, CardListTy, CardListTy], None]
+from proxybuilder_types import CardListTy
 
 
-def save_file(outstream: typing.io.TextIO, mainboard: CardIterTy, sideboard: CardIterTy,
+def save_file(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: CardListTy,
               card_process: Callable[[Card, int, bool], str]):
     mainboard = ((card, num, True) for card, num in mainboard)
     sideboard = ((card, num, False) for card, num in sideboard)
@@ -46,6 +36,14 @@ class WriteHandleTextLine:
         return line
 
 
-def save_txt(outstream: typing.io.TextIO, mainboard: CardIterTy, sideboard: CardIterTy):
+def save_txt(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
     card_processor = WriteHandleTextLine()
     save_file(outstream, mainboard, sideboard, card_processor)
+
+
+def save_csv(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+    pass
+
+
+def save_xmage(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+    pass
