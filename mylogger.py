@@ -73,7 +73,6 @@ logging_handler_out = logging.StreamHandler(sys.stdout)
 logging_handler_out.setLevel(logging.INFO)
 logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
 MAINLOGGER.addHandler(logging_handler_out)
-
 logging_handler_err = logging.StreamHandler(sys.stderr)
 logging_handler_err.setLevel(logging.WARNING)
 MAINLOGGER.addHandler(logging_handler_err)

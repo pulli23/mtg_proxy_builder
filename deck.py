@@ -2,9 +2,8 @@ import copy
 import os
 import itertools
 from collections import Counter
-from typing import Dict, Tuple, List, Sequence
+from typing import Dict, Tuple, Sequence
 from typing import Iterable, io, Callable, Any, Mapping, AnyStr
-
 
 import load_file
 import save_file
@@ -12,7 +11,8 @@ from card import Card
 from proxy import output
 
 import mylogger
-from proxybuilder_types import CardCountTy, CardDictTy, CardListTy, CounterTy
+from proxybuilder_types import CardCountTy, CardDictTy, CardListTy, ReadFuncTy, SaveFuncTy
+
 logger = mylogger.MAINLOGGER
 
 
@@ -76,7 +76,7 @@ class Deck:
             return '\n    '.join(
                 str(n) + ' ' + str(card)
                 for card, n in sorted(l.items(),
-                                      key=lambda x: (x[0].name, x[0].version))
+                                      key=lambda x: (x[0].name, x[0].edition))
             )
 
         ret = []
@@ -89,7 +89,7 @@ class Deck:
             ret.append(d)
         return '\n'.join(ret)
 
-    def guarded_load(self, fname: AnyStr, readfunc: load_file.ReadFuncTy):
+    def guarded_load(self, fname: AnyStr, readfunc: ReadFuncTy):
         print('Loading deck ({0})...'.format(fname))
         try:
             with open(fname) as f:
@@ -150,8 +150,28 @@ class Deck:
             self.load(file, reader)
         logger.info("done!")
 
+    def guarded_save(self, fname: AnyStr, exportfunc: SaveFuncTy):
+        print('Exporting deck ({0})...'.format(fname))
+        try:
+            with open(fname, 'w') as f:
+                self.save(f, exportfunc)
+        except ValueError as e:
+            logger.error("While handling file {1} "
+                         "the following errors occured:\n - {0};".format('\n - '.join(e.args),
+                                                                         os.path.abspath(fname)))
+        except (FileNotFoundError, IsADirectoryError):
+            logger.error("file {0} does not exist".format(os.path.abspath(fname)))
+        except PermissionError:
+            logger.error("No permission to open {0}".format(os.path.abspath(fname)))
+        except OSError:
+            logger.error("General failure to open {0}".format(os.path.abspath(fname)))
+        except BaseException:
+            raise
+        else:
+            logger.info("Exporting deck, done!")
+
     def save(self, outstream: io.TextIO, saver):
-        saver(outstream, self.mainboard, self.sideboard)
+        saver(outstream, self.mainboard.items(), self.sideboard.items())
 
     def save_txt(self, fname: AnyStr):
         saver = save_file.save_txt
@@ -268,7 +288,7 @@ def exclude_inventory(dck: Deck, inventory: Deck) -> Deck:
     side_out = Counter()
     outskipped = Counter()
 
-    view = sorted(dck.full_deck.items(), key=lambda x: (x[0].name, x[0].version), reverse=True)
+    view = sorted(dck.full_deck.items(), key=lambda x: (x[0].name, x[0].edition), reverse=True)
     for card, num in view:
         if num > 0:
             num_owned = sum(num for item, num in inv_counter.items() if card.alike(item))

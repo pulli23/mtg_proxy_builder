@@ -27,12 +27,12 @@ class WriteHandleTextLine:
     def __call__(self, card: Card, count: int, section: bool) -> str:
         line = ""
         if self.current_section is None or section != self.current_section:
-            line += self.check[section]
+            line += self.check[section] + '\n'
             self.current_section = section
-        if card.version:
-            line += "{0} {1}".format(count, card.name)
+        if not card.edition:
+            line += "{0} {1}\n".format(count, card.name)
         else:
-            line += "{0} {1} [{2}]".format(count, card.name, card.version)
+            line += "{0} {1} [{2}]\n".format(count, card.name, card.edition)
         return line
 
 
@@ -45,5 +45,12 @@ def save_csv(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: Card
     pass
 
 
-def save_xmage(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+def WriteHandleXMageLine(card: Card, count: int, section: bool) -> str:
     pass
+
+
+def save_xmage(outstream: typing.io.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+    for card in CardListTy:
+        card.force_and_number()
+    card_processor = WriteHandleXMageLine
+    save_file(outstream, mainboard, sideboard, card_processor)

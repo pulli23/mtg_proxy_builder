@@ -132,7 +132,7 @@ def read_txt(file: typing.io.TextIO, line_reader: ReadLineFuncTy = None) \
 class HandleXmageLine:
     def __init__(self, line_check: Optional[str] = None):
         if line_check is None:
-            version_part = r"\[([\d\w]{3}):\d+\]"
+            version_part = r"\[([\d\w]{3}):(\d+)\]"
             name_part = r"[^]0-9[\s](?:[^]0-9[]*[^]0-9[\s])?"
             line_check = r"(SB:)?\s*(\d+)\s*({1})\s\s*({0})".format(name_part, version_part)
         self.prog_line = re.compile(line_check, re.IGNORECASE)
@@ -147,9 +147,10 @@ class HandleXmageLine:
         if mo is not None:
             sb = True if mo.group(1) is not None else False
             num = int(mo.group(2))
-            name = mo.group(5)
+            name = mo.group(6)
             version = mo.group(4)
-            return Card(name, version), num, sb
+            colnum = mo.group(5)
+            return Card(name, version, colnum), num, sb
         return None
 
 

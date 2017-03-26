@@ -70,7 +70,8 @@ class SetupData:
             if fname:
                 ext = os.path.splitext(fname)[1]
                 all_type_keys = {"csv": save_file.save_csv,
-                                 "txt": save_file.save_txt}
+                                 "txt": save_file.save_txt,
+                                 "dck": save_file.save_xmage}
                 try:
                     return all_type_keys[ext]
                 except KeyError:

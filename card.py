@@ -2,40 +2,60 @@ from typing import AnyStr
 
 
 class Card:
-    __slots__ = ["_version", "_name"]
+    __slots__ = ["_version", "_name", "_colnum", "_types", "_subtypes", "_supertypes", "_language"]
 
-    def __init__(self, name: AnyStr, version: AnyStr = ""):
+    def __init__(self, name: AnyStr, version: AnyStr = "", collectors_number: int = None):
         self._name = name
         self._version = version
+        self._colnum = collectors_number
+        self._language = "en"
+        self._subtypes = []
+        self._supertypes = []
 
     def alike(self, other: "Card") -> bool:
-        sv = MTGSET_CODES.get(self.version, self.version)
-        ov = MTGSET_CODES.get(other.version, other.version)
-        return self.name.lower() == other.name.lower() and (not sv or not ov or sv == ov)
+        sv = MTGSET_CODES.get(self.edition, self.edition)
+        ov = MTGSET_CODES.get(other.edition, other.edition)
+        return (not sv or not ov or sv == ov) and self.name.lower() == other.name.lower()
+
+    @property
+    def language(self):
+        return self._language
 
     @property
     def name(self):
         return self._name
 
     @property
-    def version(self):
+    def edition(self):
         return self._version
+
+    @property
+    def collectors_number(self):
+        return self._colnum
 
     def __eq__(self, other: "Card") -> bool:
         return isinstance(other, self.__class__) \
-               and self.name == other.name and self.version == other.version
+               and self.name == other.name \
+               and self.edition == other.edition \
+               and self.collectors_number == other.collectors_number \
+               and self.language == other.language
 
     def __hash__(self) -> int:
-        return hash((self.name, self.version))
+        return hash((self.name, self.edition, self.collectors_number, self.language))
 
     def __str__(self) -> str:
-        if self.version == "":
+        if self.edition == "":
             return self.name
         else:
-            return "{0} [{1}]".format(self.name, self.version)
+            return "{0} [{1}]".format(self.name, self.edition)
 
     def __repr__(self) -> str:
-        return "{0}(name={1}, version={2})".format(type(self).__name__, self.name, self.version)
+        return "{0}(name={1}, edition={2}, collectors_number={3}, language={4})"\
+            .format(type(self).__name__,
+                    self.name,
+                    self.edition,
+                    self.collectors_number,
+                    self.language)
 
 
 # start
