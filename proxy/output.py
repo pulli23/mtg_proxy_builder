@@ -22,7 +22,7 @@ class OutputLatex:
         self.background_color = background_color
         self.image_directory = image_directory
         if card_dimensions is None:
-            card_dimensions = (63 - 2, 88 - 2)
+            card_dimensions = (63 - 3, 88 - 3)
         self.card_dimensions = card_dimensions
         self.latexstr = None
         self.mypaper = None
