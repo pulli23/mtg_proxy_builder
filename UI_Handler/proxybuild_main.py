@@ -1,5 +1,6 @@
 import os
 from typing import Iterable, List, AnyStr
+import requests
 
 import deck
 import load_file
@@ -61,8 +62,8 @@ def build_proxies(settings):
     proxies = deck.exclude_inventory(proxies, combined_inv)
     logger.info(verbose_msg="PROXY LIST")
     logger.info(verbose_msg=str(proxies))
-
-    image_fnames = imd.get_all_images(proxies, settings.figures)
+    session = requests.session()
+    image_fnames = imd.get_all_images(proxies, settings.figures, session)
     rel_fig_dir = os.path.relpath(settings.figures, os.path.dirname(settings.output))
     if rel_fig_dir == ".":
         rel_fig_dir = ""

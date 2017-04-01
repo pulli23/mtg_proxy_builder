@@ -3,7 +3,8 @@ import requests
 import difflib
 import re
 from collections import Counter
-import  itertools
+import itertools
+import functools
 from typing import List, Tuple, Iterable, Generator, Union, Dict, Optional, Sequence
 
 from bs4 import BeautifulSoup, Tag
@@ -15,9 +16,17 @@ import mana_types
 logger = mylogger.MAINLOGGER
 
 
+def fix_magiccards_info_code(shortcode: str) -> str:
+    codes = {
+        "nem": "ne"
+    }
+    return codes.get(shortcode, shortcode)
+
+
 def _get_literal_url(edition: str, language: str, collectors_number: int,
                      source: str = "http://magiccards.info") -> Tuple[str, Dict[str, str]]:
-    url = "{0}/{1}.html".format(source, '/'.join((edition, language, str(collectors_number))))
+    url = "{0}/{1}.html".format(source, '/'.join((fix_magiccards_info_code(edition),
+                                                  language, str(collectors_number))))
     payload = {}
     return url, payload
 
@@ -25,27 +34,30 @@ def _get_literal_url(edition: str, language: str, collectors_number: int,
 def _get_lookup_url(name: str, edition: str = None, language: str = None,
                     source: str = "http://magiccards.info") -> Tuple[str, Dict[str, str]]:
     name = name.replace('//', '/')
-    if edition is not None:
+    if edition:
         name += " e:\"{0}\"".format(edition)
-        if language is not None:
+        if language:
             name += "/{0}".format(language)
     payload = {'q': name}
     url = source + "/query"
     return url, payload
 
 
+@functools.lru_cache(maxsize=512)
 def load_magic_card(name: str = None, edition: str = None, collectors_number: int = None,
-                    language: str = None, source: str = "http://magiccards.info") \
+                    language: str = None, source: str = "http://magiccards.info",
+                    session: requests.Session = None) \
         -> requests.Response:
-    if name is None and (edition is None or collectors_number is None or language is None):
+    if session is None:
+        session = requests
+    if name is None and (edition or collectors_number is not None or language):
         raise ValueError("Bad inputs")
-    if edition is not None and \
-                    collectors_number is not None and \
-                    language is not None:
+    if edition and collectors_number is not None and language:
         url, payload = _get_literal_url(edition, language, collectors_number, source)
     else:
         url, payload = _get_lookup_url(name, edition, language, source)
-    res = requests.get(url, payload)
+
+    res = session.get(url, params=payload)
     logger.debug("Lookup url: {0}".format(res.url))
     res.raise_for_status()
     return res
@@ -135,9 +147,10 @@ def get_main_name(info_tag: Tag) -> str:
 
 
 def find_card_tablecells(name: str = None, edition: str = None, collectors_number: int = None,
-                         language: str = None, source: str = "http://magiccards.info") \
+                         language: str = None, source: str = "http://magiccards.info",
+                         session: requests.Session = None) \
         -> Tuple[Tag, Tag, Tag]:
-    res = load_magic_card(name, edition, collectors_number, language, source)
+    res = load_magic_card(name, edition, collectors_number, language, source, session)
     soup = _make_soup(res.text)
     cardtables = find_htmltext_tables(soup)
     card_info_list = safe_unpack_cardtables(cardtables)
@@ -151,17 +164,18 @@ def find_card_tablecells(name: str = None, edition: str = None, collectors_numbe
 
 def find_card_urls(name_or_card: "Union[card.Card, str]" = None,
                    edition: str = None, collectors_number: int = None, language: str = None,
-                   source: str = "http://magiccards.info") \
+                   source: str = "http://magiccards.info",
+                   session: requests.Session = None) \
         -> Generator[str, None, None]:
     try:
         _, info_tag, ex_info_tag = find_card_tablecells(name_or_card.name,
                                                         name_or_card.edition,
                                                         name_or_card.collectors_number,
                                                         name_or_card.language,
-                                                        source)
+                                                        source, session)
     except AttributeError:
         _, info_tag, ex_info_tag = find_card_tablecells(name_or_card, edition, collectors_number,
-                                                        language, source)
+                                                        language, source, session)
 
     yield get_main_edition_link(info_tag)
     yield from get_other_edition_links(ex_info_tag)
@@ -175,8 +189,9 @@ def analyse_main_rules(info_tag: Tag, english: bool = None) \
         -> Tuple[Optional[str], Optional[Tuple[int, int]], Tuple[List[str], str, List[str]]]:
     if english is None:
         english = check_is_english_from_main(info_tag)
-    line = info_tag.find("p").string
-    m = re.match("^\s*(.*?),?\s*\n\s*(.*?)\s*(\n*\s*)?$", line)
+    line = info_tag.find("p")
+    linestr = line.contents[0]
+    m = re.match("^\s*(.*?),?\s*\n\s*(.*?)\s*(\n*\s*)?$", linestr)
     type_line = m.group(1)
     mana_string = m.group(2)
     mana = analyse_mana_string(mana_string)

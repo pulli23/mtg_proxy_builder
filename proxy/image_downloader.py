@@ -24,10 +24,15 @@ def find_image_url(urliter: Union[Iterable[str], Generator[str, None, None]],
     # noinspection PyTypeChecker
     for url in urliter:
         edition, language, number = card_dl.analyse_hyperref(url)
-        yield "{0}/scans/{1}.jpg".format(source, '/'.join((language, edition, number)))
+        yield "{0}/scans/{1}.jpg".format(source,
+                                         '/'.join((language,
+                                                   card_dl.fix_magiccards_info_code(edition),
+                                                   number))
+                                         )
 
 
-def get_all_images(names: deck.Deck, output_directory: str) -> Dict[card.Card, str]:
+def get_all_images(names: deck.Deck, output_directory: str, session: requests.Session = None) \
+        -> Dict[card.Card, str]:
     logger.info("Loading images...", verbose_msg=os.path.abspath(output_directory))
     outnames = {}
     view = sorted(names.full_deck.items(), key=lambda x: (x[0].name, x[0].edition), reverse=True)
@@ -35,7 +40,7 @@ def get_all_images(names: deck.Deck, output_directory: str) -> Dict[card.Card, s
         if num > 0 and card not in outnames:
             try:
                 logger.info(verbose_msg="Loading {0}".format(card))
-                outname = get_image(card, output_directory)
+                outname = get_image(card, output_directory, session)
                 outnames[card] = outname
             except (requests.exceptions.HTTPError, ValueError):
                 logger.warning("{0} not found".format(card))
@@ -47,7 +52,7 @@ def name_to_fname(name: str) -> str:
     return name.replace('/', '%2F').lower()
 
 
-def get_image(card: card.Card, output_directory: str) -> str:
+def get_image(card: card.Card, output_directory: str, session: requests.Session = None) -> str:
     os.makedirs(output_directory, exist_ok=True)
 
     outname = name_to_fname(card.name)
@@ -66,10 +71,13 @@ def get_image(card: card.Card, output_directory: str) -> str:
         logger.debug("Using existing file \"{0}\"".format(existing_fname))
         return existing_fname
     except StopIteration:
-        return download_card_image(card, output_directory)
+        return download_card_image(card, output_directory, session)
 
 
-def download_card_image(card: card.Card, output_directory: str) -> str:
+def download_card_image(card: card.Card, output_directory: str, session: requests.Session = None) \
+        -> str:
+    if session is None:
+        session = requests
     outname = name_to_fname(card.name)
     gen_card_urls = card_dl.find_card_urls(card)
     links = find_image_url(gen_card_urls)
@@ -81,7 +89,7 @@ def download_card_image(card: card.Card, output_directory: str) -> str:
         version, num, ext = search.group(1), search.group(2), search.group(3)
         outname += "[{0},{2}].{1}".format(version, ext, num)
         outputfile = output_directory + '/' + outname
-        response = requests.get(link, stream=True)
+        response = session.get(link, stream=True)
         if response.status_code == 200:
             break
     else:

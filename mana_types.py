@@ -22,7 +22,7 @@ class Mana(metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def can_be_paid_by(cls) -> List[Tuple["ColoredMana", int]]:
+    def can_be_paid_by(cls) -> List[Tuple["BasicTypeMana", int]]:
         return []
 
     @classmethod
@@ -67,7 +67,7 @@ class Mana(metaclass=abc.ABCMeta):
         return mana
 
 
-class ColoredMana(Mana, metaclass=abc.ABCMeta):
+class BasicTypeMana(Mana, metaclass=abc.ABCMeta):
     @classmethod
     def can_be_paid_by(cls) -> List[Tuple["Mana", int]]:
         pay = [(cls, 1)]
@@ -98,7 +98,7 @@ class MonoColoredHybridMana(HybridMana, metaclass=abc.ABCMeta):
     def can_be_paid_by(cls) -> List[Tuple["Mana", int]]:
         basepay = super().can_be_paid_by()
         t = [p[0] for p in basepay]
-        pay = [(c, 2) for c in ColoredMana.__subclasses__() if c not in t]
+        pay = [(c, 2) for c in BasicTypeMana.__subclasses__() if c not in t]
         pay.extend(basepay)
         return pay
 
@@ -117,8 +117,8 @@ class GenericMana(Mana):
         return "X"
 
     @classmethod
-    def can_be_paid_by(cls) -> List[Tuple[ColoredMana, int]]:
-        pay = [(c, 1) for c in ColoredMana.__subclasses__()]
+    def can_be_paid_by(cls) -> List[Tuple[BasicTypeMana, int]]:
+        pay = [(c, 1) for c in BasicTypeMana.__subclasses__()]
         pay.extend(super().can_be_paid_by())
         return pay
 
@@ -132,40 +132,46 @@ class SnowMana(Mana):
         return "S"
 
     @classmethod
-    def can_be_paid_by(cls) -> List[Tuple[ColoredMana, int]]:
-        pay = [(c, 1) for c in ColoredMana.__subclasses__()]
+    def can_be_paid_by(cls) -> List[Tuple[BasicTypeMana, int]]:
+        pay = [(c, 1) for c in BasicTypeMana.__subclasses__()]
         pay.extend(super().can_be_paid_by())
         return pay
 
 
-class WhiteMana(ColoredMana):
+class WhiteMana(BasicTypeMana):
     @classmethod
     def mana_sign(cls) -> str:
         return cls.separator.join(filter(None, ("W", super().mana_sign())))
 
 
-class BlueMana(ColoredMana):
+class BlueMana(BasicTypeMana):
     @classmethod
     def mana_sign(cls) -> str:
         return cls.separator.join(filter(None, ("U", super().mana_sign())))
 
 
-class BlackMana(ColoredMana):
+class BlackMana(BasicTypeMana):
     @classmethod
     def mana_sign(cls) -> str:
         return cls.separator.join(filter(None, ("B", super().mana_sign())))
 
 
-class RedMana(ColoredMana):
+class RedMana(BasicTypeMana):
     @classmethod
     def mana_sign(cls) -> str:
         return cls.separator.join(filter(None, ("R", super().mana_sign())))
 
 
-class GreenMana(ColoredMana):
+class GreenMana(BasicTypeMana):
     @classmethod
     def mana_sign(cls) -> str:
         return cls.separator.join(filter(None, ("G", super().mana_sign())))
+
+
+class ColorlessMana(BasicTypeMana):
+    @classmethod
+    def mana_sign(cls) -> str:
+        return cls.separator.join(filter(None, ("C", super().mana_sign())))
 
 
 class WhitePhyrexianMana(PhyrexianMana, WhiteMana):

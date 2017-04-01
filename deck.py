@@ -17,8 +17,8 @@ logger = mylogger.MAINLOGGER
 
 
 class Deck:
-    def __init__(self, mainboard: CardDictTy = None,
-                 sideboard: CardDictTy = None,
+    def __init__(self, mainboard: Mapping[Card, int] = None,
+                 sideboard: Mapping[Card, int] = None,
                  name: AnyStr = ""):
         self.name = name
         if mainboard is None:

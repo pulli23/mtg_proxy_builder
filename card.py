@@ -3,10 +3,11 @@ from typing import AnyStr, Optional
 
 import card_downloader as card_dl
 import mana_types
+import requests
 
 
 class Card:
-    def __init__(self, name: AnyStr, edition: AnyStr = "",
+    def __init__(self, name: AnyStr, edition: AnyStr = None,
                  collectors_number: int = None, language: str = "en"):
         self._name = name
         self._version = MTGSET_CODES.get(edition, edition)
@@ -78,10 +79,11 @@ class Card:
                     self.collectors_number,
                     self.language)
 
-    def load_extended_information(self, info_tag: Tag = None):
+    def load_extended_information(self, info_tag: Tag = None, session: requests.Session = None):
         if info_tag is None:
             _, info_tag, _ = card_dl.find_card_tablecells(self.name, self.edition,
-                                                          self.collectors_number, self.language)
+                                                          self.collectors_number, self.language,
+                                                          session=session)
         mana, pt, alltypes = card_dl.analyse_main_rules(info_tag)
         self.mana = mana
         self._pt = pt
@@ -100,12 +102,12 @@ class Card:
         return gen + ''.join(str(m) for m in self.mana if type(m) != mana_types.GenericMana)
 
 
-def force_edition_and_number_copy(card: Card) -> Card:
+def force_edition_and_number_copy(card: Card, session: requests.Session = None) -> Card:
     edition = card.edition
     num = card.collectors_number
     language = card.language
     if edition is None or num is None:
-        url = next(card_dl.find_card_urls(card))
+        url = next(card_dl.find_card_urls(card, session=session))
         edition, language, num = card_dl.analyse_hyperref(url)
 
     return Card(card.name, edition, num, language)
@@ -280,7 +282,6 @@ def _make_mtgsetcode_array():
         "commander 2014": "c14",
         "commander 2015": "c15",
         "commander 2016": "c16",
-        "commander anthology": "cma",
         "conspiracy": "cns",
         "conspiracy: take the crown": "cn2",
 
@@ -296,6 +297,85 @@ def _make_mtgsetcode_array():
         "unhinged": "unh"
     }
     __append = {v: v for v in codes.values()}
+    codes.update(__append)
+    __append = {
+        "al": "lea",
+        "be": "leb",
+        "un": "2ed",
+        "rv": "3ed",
+        "4e": "4ed",
+        "5e": "5ed",
+        "6e": "5ed",
+        "7e": "7ed",
+        "8e": "7ed",
+        "9e": "7ed",
+        "an": "arn",
+        "aq": "atq",
+        "lg": "leg",
+        "dk": "drk",
+        "fe": "fem",
+        "hl": "hml",
+        "ia": "ice",
+        "ai": "all",
+        "cstd": "csp",
+        "cs": "csp",
+        "mr": "mir",
+        "vi": "vis",
+        "wl": "wth",
+        "tp": "tmp",
+        "sh": "sth",
+        "ex": "exo",
+        "us": "usg",
+        "ul": "ulg",
+        "ud": "uds",
+        "mm": "mmq",
+        "ne": "nem",
+        "pr": "pcy",
+        "in": "inv",
+        "ps": "pls",
+        "ap": "apc",
+        "od": "ody",
+        "tr": "tor",
+        "ju": "jud",
+        "on": "ons",
+        "le": "lgn",
+        "sc": "scg",
+        "mi": "mrd",
+        "ds": "dst",
+        "gp": "gpt",
+        "di": "dis",
+        "ts": "tsp",
+        "pc": "plc",
+        "lw": "lrw",
+        "mt": "mor",
+        "cfx": "con",
+
+        "ch": "chr",
+        "at": "ath",
+        "br": "brb",
+        "bd": "btd",
+        "dm": "dkm",
+        "jvc": "dd2",
+        "dvd": "ddc",
+        "gvl": "ddd",
+        "pvc": "dde",
+        "fvd": "drb",
+        "fve": "v09",
+        "fvr": "v10",
+        "fvl": "v11",
+        "pds": "h09",
+
+        "pch": "hop",
+
+        "po": "por",
+        "p3k": "ptk",
+        "st": "s99",
+        "st2k": "s00",
+
+        "cedi": "ced",
+        "ug": "ugl",
+        "uh": "unh"
+    }
     codes.update(__append)
     # synonyms
     __append = {
@@ -314,7 +394,9 @@ def _make_mtgsetcode_array():
         "8th edition": "8ed",
         "9th edition": "9ed",
         "10th edition": "10e",
-        "origins": "ori"
+        "origins": "ori",
+        "deckmasters": "dkm",
+        "commander anthology": "cma"
     }
     codes.update(__append)
     __append = {}
@@ -339,6 +421,7 @@ def _make_mtgsetcode_array():
 
     codes = {n.lower(): v.lower() for n, v in codes.items()}
     return codes
+
 
 
 MTGSET_CODES = _make_mtgsetcode_array()
