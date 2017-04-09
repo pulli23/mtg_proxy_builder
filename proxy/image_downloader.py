@@ -74,12 +74,11 @@ def get_image(card: card.Card, output_directory: str, session: requests.Session 
         return download_card_image(card, output_directory, session)
 
 
-def download_card_image(card: card.Card, output_directory: str, session: requests.Session = None) \
+def download_card_image(card: card.Card, output_directory: str, session: card_dl.CardDownloader) \
         -> str:
-    if session is None:
-        session = requests
     outname = name_to_fname(card.name)
-    gen_card_urls = card_dl.find_card_urls(card)
+    analyzer = session.make_html_analyzer(card.name, card.edition, card.collectors_number, card.language)
+    gen_card_urls = analyzer.find_card_urls()
     links = find_image_url(gen_card_urls)
     response = None
     outputfile = None
@@ -89,7 +88,7 @@ def download_card_image(card: card.Card, output_directory: str, session: request
         version, num, ext = search.group(1), search.group(2), search.group(3)
         outname += "[{0},{2}].{1}".format(version, ext, num)
         outputfile = output_directory + '/' + outname
-        response = session.get(link, stream=True)
+        response = session.session.get(link, stream=True)
         if response.status_code == 200:
             break
     else:

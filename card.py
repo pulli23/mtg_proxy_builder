@@ -1,9 +1,7 @@
-from bs4 import Tag
 from typing import AnyStr, Optional
 
 import card_downloader as card_dl
 import mana_types
-import requests
 
 
 class Card:
@@ -79,12 +77,13 @@ class Card:
                     self.collectors_number,
                     self.language)
 
-    def load_extended_information(self, info_tag: Tag = None, session: requests.Session = None):
-        if info_tag is None:
-            _, info_tag, _ = card_dl.find_card_tablecells(self.name, self.edition,
-                                                          self.collectors_number, self.language,
-                                                          session=session)
-        mana, pt, alltypes = card_dl.analyse_main_rules(info_tag)
+    def load_extended_information(self, analyzed_html: card_dl.HTMLAnalyzer):
+        # if analyzed_html is None:
+        #     if session is None:
+        #         session = card_dl.CardDownloader()
+        #     analyzed_html = session.make_html_analyzer(self.name, self.edition,
+        #                                                self.collectors_number, self.language)
+        mana, pt, alltypes = analyzed_html.analyse_main_rules()
         self.mana = mana
         self._pt = pt
         self._types = alltypes
@@ -102,35 +101,41 @@ class Card:
         return gen + ''.join(str(m) for m in self.mana if type(m) != mana_types.GenericMana)
 
 
-def force_edition_and_number_copy(card: Card, session: requests.Session = None) -> Card:
+def force_edition_and_number_copy(card: Card, session: card_dl.CardDownloader = None) -> Card:
+    if session is None:
+        session = card_dl.CardDownloader()
+    analyzer = session.make_html_analyzer(card.name, card.edition, card.collectors_number, card.language)
     edition = card.edition
     num = card.collectors_number
     language = card.language
     if edition is None or num is None:
-        url = next(card_dl.find_card_urls(card, session=session))
+        url = next(analyzer.find_card_urls())
         edition, language, num = card_dl.analyse_hyperref(url)
 
     return Card(card.name, edition, num, language)
 
 
-def make_fully_qualified_card_from_info(info_tag: Tag):
-    url = card_dl.get_main_edition_link(info_tag)
+def make_fully_qualified_card_from_info(analyzer: card_dl.HTMLAnalyzer):
+    url = analyzer.get_main_edition_link()
     edition, language, collectors_number = card_dl.analyse_hyperref(url)
-    name = card_dl.get_main_name(info_tag)
+    name = analyzer.get_main_name()
     card = Card(name, edition, int(collectors_number), language)
     return card
 
 
 def make_fully_qualified_card(name: AnyStr = None, edition: AnyStr = None,
-                              collectors_number: int = None, language: AnyStr = None):
+                              collectors_number: int = None, language: AnyStr = None,
+                              session: card_dl.CardDownloader = None) -> Card:
     if name is None and (edition is None or collectors_number is None):
         raise ValueError("bad inputs")
+    if session is None:
+        session = card_dl.CardDownloader()
     if language is None and name is None:
         language = "en"
     if edition is not None:
         edition = MTGSET_CODES.get(edition, edition)
-    _, info_tag, _ = card_dl.find_card_tablecells(name, edition, collectors_number, language)
-    return make_fully_qualified_card_from_info(info_tag)
+    analyzer = session.make_html_analyzer(name, edition, collectors_number, language)
+    return make_fully_qualified_card_from_info(analyzer)
 
 
 def _make_mtgsetcode_array():
