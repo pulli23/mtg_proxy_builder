@@ -185,7 +185,7 @@ class Deck(JSONable):
             logger.info("Exporting deck, done!")
 
     def save(self, outstream: TextIO, saver):
-        saver(outstream, self.mainboard.items(), self.sideboard.items())
+        saver(outstream, self.mainboard.items(), self.sideboard.items(), name=self.name)
 
     def save_txt(self, fname: AnyStr):
         saver = save_file.save_txt

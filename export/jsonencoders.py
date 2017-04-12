@@ -3,6 +3,9 @@ import json
 import abc
 from typing import Any, Dict
 
+from mylogger import MAINLOGGER
+logger = MAINLOGGER
+
 
 class JSONable(metaclass=abc.ABCMeta):
     @abc.abstractmethod
@@ -30,14 +33,14 @@ def json_decoder(o):
             c = o["class"]
             cls = getattr(sys.modules[m], c)
         except AttributeError as a:
-            print(a)
+            logger.warning(verbose=str(a))
         else:
             del o["class"]
             del o["module"]
             try:
                 return cls.from_json(**o)
             except AttributeError as a:
-                print(a)
+                logger.warning(verbose=str(a))
     return o
 
 
@@ -45,5 +48,13 @@ def load_string(s: str) -> Any:
     return json.loads(s, object_hook=json_decoder)
 
 
+def load_file(fp) -> Any:
+    return json.load(fp, object_hook=json_decoder)
+
+
 def dump_string(obj) -> str:
     return json.dumps(obj, cls=JSONEncoder)
+
+
+def dump_file(obj, fp):
+    json.dump(obj, fp, cls=JSONEncoder)

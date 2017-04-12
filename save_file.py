@@ -10,6 +10,7 @@ import card
 from card import Card
 from proxybuilder_types import CardListTy, CardIterTy
 import card_downloader as cdl
+from export.jsonencoders import dump_string, dump_file
 import mylogger
 logger = mylogger.MAINLOGGER
 
@@ -42,7 +43,7 @@ class WriteHandleTextLine:
         return line
 
 
-def save_txt(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+def save_txt(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardListTy, name: str = None) -> None:
     card_processor = WriteHandleTextLine()
     save_file(outstream, mainboard, sideboard, card_processor)
 
@@ -98,10 +99,16 @@ def _check_and_force_edition_num(c: Card, session: cdl.CardDownloader = None):
         return card.force_edition_and_number_copy(c, session)
 
 
-def save_xmage(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+def save_xmage(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardListTy, name: str = None) -> None:
     session = cdl.CardDownloader()
     newmainboard = ((_check_and_force_edition_num(c, session), n) for c, n in mainboard)
     newsideboard = ((_check_and_force_edition_num(c, session), n) for c, n in sideboard)
-
-    card_processor = WriteHandleXMageLine(os.path.splitext(os.path.split(outstream.name)[-1])[0])
+    if not name:
+        name = os.path.splitext(os.path.split(outstream.name)[-1])[0]
+    card_processor = WriteHandleXMageLine(name)
     save_file(outstream, newmainboard, newsideboard, card_processor)
+
+
+def save_json(outstream: typing.TextIO, mainboard: CardIterTy, sideboard: CardListTy, name: str = None) -> None:
+    d = {"mainboard": [(c, n) for c, n in mainboard], "sideboard": [(c, n) for c, n in sideboard], "name": name}
+    dump_file(d, outstream)

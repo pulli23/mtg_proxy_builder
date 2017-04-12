@@ -50,7 +50,8 @@ class SetupData:
             -> ReadFuncTy:
         all_type_reverse_keys = {load_file.read_csv: ("csv", "deckbox"),
                                  load_file.read_txt: ("txt", "text", "plain"),
-                                 load_file.read_xmage_deck: ("xmage",)}
+                                 load_file.read_xmage_deck: ("xmage",),
+                                 load_file.read_json: ("json", "native", "full")}
         all_type_keys = {k: fun for fun, keys in all_type_reverse_keys.items() for k in keys}
         try:
             return all_type_keys[input_type]
@@ -62,7 +63,8 @@ class SetupData:
             -> SaveFuncTy:
         all_type_reverse_keys = {save_file.save_csv: ("csv", "deckbox"),
                                  save_file.save_txt: ("txt", "text", "plain"),
-                                 save_file.save_xmage: ("xmage",)}
+                                 save_file.save_xmage: ("xmage",),
+                                 save_file.save_json: ("json", "native", "full")}
         all_type_keys = {k: fun for fun, keys in all_type_reverse_keys.items() for k in keys}
         try:
             return all_type_keys[output_type]
@@ -71,7 +73,8 @@ class SetupData:
                 ext = os.path.splitext(fname)[1][1:]
                 all_type_keys = {"csv": save_file.save_csv,
                                  "txt": save_file.save_txt,
-                                 "dck": save_file.save_xmage}
+                                 "dck": save_file.save_xmage,
+                                 "json": save_file.save_json}
                 try:
                     return all_type_keys[ext]
                 except KeyError:

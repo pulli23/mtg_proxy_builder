@@ -1,5 +1,4 @@
 import csv
-import io
 import itertools
 import operator
 import re
@@ -10,6 +9,7 @@ from typing import Optional, Callable, Tuple
 import mylogger
 from card import Card
 from proxybuilder_types import CardCountSecTy, CardListTy, ReadLineFuncTy, CardCountTy, ReadFuncTy
+from export.jsonencoders import load_file, load_string
 
 
 def read_file(file: Iterable, line_process: ReadLineFuncTy,
@@ -51,14 +51,14 @@ def process_deckbox_inventory_row(row: Tuple[AnyStr, ...]) -> Optional[CardCount
         return None
 
 
-def read_inventory_deckbox_org(file: typing.io.TextIO, *args, **kwargs) \
+def read_inventory_deckbox_org(file: typing.TextIO, *args, **kwargs) \
         -> CardListTy:
     return read_csv(file, name_column=2, count_column=0,
                     section_column=None, version_column=3,
                     *args, **kwargs)[0]
 
 
-def read_csv(file: typing.io.TextIO, name_column: int = 1, count_column: int = 0,
+def read_csv(file: typing.TextIO, name_column: int = 1, count_column: int = 0,
              section_column: int = None, version_column: int = None, *args,
              **kwargs) \
         -> Tuple[CardListTy, CardListTy]:
@@ -88,10 +88,9 @@ class HandleTextline:
 
     def sniff(self, line: str) -> bool:
         line = line.strip()
-        if line and \
-                        re.match(self.prog_main, line) is None and \
-                        re.match(self.prog_side, line) is None and \
-                        re.fullmatch(self.prog_line, line) is None:
+        if line and re.match(self.prog_main, line) is None \
+                and re.match(self.prog_side, line) is None \
+                and re.fullmatch(self.prog_line, line) is None:
             return False
         else:
             return True
@@ -122,17 +121,23 @@ class HandleTextline:
             return Card(name.lower(), version.lower()), num, self.loading_main
 
 
-def read_txt(file: typing.io.TextIO, line_reader: ReadLineFuncTy = None) \
+def read_txt(file: typing.TextIO, line_reader: HandleTextline=None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleTextline()
     return read_file(file, line_reader)
 
 
+def read_json(file: typing.TextIO) \
+        -> Tuple[CardListTy, CardListTy]:
+    l = load_file(file)
+    return l["mainboard"], l["sideboard"]
+
+
 class HandleXmageLine:
     def __init__(self, line_check: Optional[str] = None):
         if line_check is None:
-            version_part = r"\[([\d\w]{3}):(\d+)\]"
+            version_part = r"\[([\d\w]+):(\d+)\]"
             name_part = r"[^]0-9[\s](?:[^]0-9[]*[^]0-9[\s])?"
             line_check = r"(SB:)?\s*(\d+)\s*({1})\s\s*({0})".format(name_part, version_part)
         self.prog_line = re.compile(line_check, re.IGNORECASE)
@@ -150,12 +155,11 @@ class HandleXmageLine:
             name = mo.group(6)
             version = mo.group(4)
             colnum = mo.group(5)
-            return Card(name, version, colnum), num, sb
+            return Card(name, version, int(colnum)), num, sb
         return None
 
 
-def read_xmage_deck(file: typing.io.TextIO,
-                    line_reader: ReadLineFuncTy = None) \
+def read_xmage_deck(file: typing.TextIO, line_reader: HandleXmageLine=None) \
         -> Tuple[CardListTy, CardListTy]:
     if line_reader is None:
         line_reader = HandleXmageLine()
@@ -165,7 +169,7 @@ def read_xmage_deck(file: typing.io.TextIO,
 def sniff_xmage(sample: Sequence) -> Callable[[str], Optional[CardCountSecTy]]:
     midlines = HandleXmageLine()
     firstline = HandleXmageLine("name:.*")
-    version_part = r"\[([\d\w]{3}):\d+\]"
+    version_part = r"\[([\d\w]+):\d+\]"
     layout_regex = r"\(\d+,\d+\)\([\w_]+,(true|false)(,\d+)?\)\|(\(({0}(,{0})*)?\))*".format(
         version_part)
     last_lines = HandleXmageLine("layout (main|sideboard):" + layout_regex)
@@ -188,48 +192,60 @@ def sniff_plain(sample: Sequence) -> Callable[[str], Optional[CardCountSecTy]]:
     return h
 
 
-def sniff_reader(file: typing.io.TextIO, num: int = 40) -> ReadFuncTy:
+def sniff_json(sample: Sequence) -> bool:
+    sample = str(sample)
+    loaded = load_string(sample)
+    return True
+
+
+def sniff_reader(file: typing.TextIO, num: int = 40) -> ReadFuncTy:
     pos = file.tell()
     header = file.readline()
     sample = header + "".join(itertools.islice(file, num - 1))  # read first N lines to sniff
     ret = None
     try:
-        dialect = csv.Sniffer().sniff(sample, (";", ","))
-    except csv.Error:
+        b = sniff_json(sample)
+    except ValueError:
         try:
-            linereader = sniff_xmage(sample.splitlines())
-        except ValueError:
-            linereader = sniff_plain(sample.splitlines())
-            mylogger.MAINLOGGER.info("Plain text guessed")
-            ret = lambda line: read_txt(line, line_reader=linereader)
+            dialect = csv.Sniffer().sniff(sample, (";", ","))
+        except csv.Error:
+            try:
+                linereader = sniff_xmage(sample.splitlines())
+            except ValueError:
+                linereader = sniff_plain(sample.splitlines())
+                mylogger.MAINLOGGER.info("Plain text guessed")
+                ret = lambda fp: read_txt(fp, line_reader=linereader)
+            else:
+                mylogger.MAINLOGGER.info("Xmage save file guessed")
+                ret = lambda fp: read_xmage_deck(fp, line_reader=linereader)
         else:
-            mylogger.MAINLOGGER.info("Xmage save file guessed")
-            ret = lambda line: read_xmage_deck(line, line_reader=linereader)
+            mylogger.MAINLOGGER.info("CSV input guessed")
+            v = csv.reader([header], dialect=dialect)
+            line = list(map(str.lower, next(v)))
+            count_column = line.index("count")
+            name_column = line.index("name")
+            try:
+                section_column = line.index("section")
+            except ValueError:
+                section_column = None
+            try:
+                version_column = line.index("edition")
+            except ValueError:
+                version_column = None
+            ret = lambda file: read_csv(file,
+                                        name_column=name_column,
+                                        count_column=count_column,
+                                        version_column=version_column,
+                                        section_column=section_column,
+                                        dialect=dialect)
     else:
-        mylogger.MAINLOGGER.info("CSV input guessed")
-        v = csv.reader([header], dialect=dialect)
-        line = list(map(str.lower, next(v)))
-        count_column = line.index("count")
-        name_column = line.index("name")
-        try:
-            section_column = line.index("section")
-        except ValueError:
-            section_column = None
-        try:
-            version_column = line.index("edition")
-        except ValueError:
-            version_column = None
-        ret = lambda file: read_csv(file,
-                                    name_column=name_column,
-                                    count_column=count_column,
-                                    version_column=version_column,
-                                    section_column=section_column,
-                                    dialect=dialect)
+        mylogger.MAINLOGGER.info("JSON file guessed")
+        ret = lambda fp: read_json(fp)
     file.seek(pos)
     return ret
 
 
-def read_any_file(file: typing.io.TextIO) \
+def read_any_file(file: typing.TextIO) \
         -> Tuple[CardListTy, CardListTy]:
     reader = sniff_reader(file)
     return reader(file)
