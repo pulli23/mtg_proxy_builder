@@ -68,14 +68,15 @@ class SetupData:
             return all_type_keys[output_type]
         except KeyError:
             if fname:
-                ext = os.path.splitext(fname)[1]
+                ext = os.path.splitext(fname)[1][1:]
                 all_type_keys = {"csv": save_file.save_csv,
                                  "txt": save_file.save_txt,
                                  "dck": save_file.save_xmage}
                 try:
                     return all_type_keys[ext]
                 except KeyError:
-                    return save_file.save_txt
+                    pass
+        return save_file.save_txt
 
     def setup_proxy(self):
         self.input = os.path.normpath(self.input)

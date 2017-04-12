@@ -2,8 +2,8 @@ import copy
 import os
 import itertools
 from collections import Counter
-from typing import Dict, Tuple, Sequence
-from typing import Iterable, io, Callable, Any, Mapping, AnyStr
+from typing import Dict, Tuple, Sequence, Union, TextIO
+from typing import Iterable, Callable, Any, Mapping, AnyStr
 
 import load_file
 import save_file
@@ -12,16 +12,30 @@ from proxy import output
 
 import mylogger
 from proxybuilder_types import CardCountTy, CardDictTy, CardListTy, ReadFuncTy, SaveFuncTy
+from export.jsonencoders import JSONable
 
 logger = mylogger.MAINLOGGER
 
 
-class Deck:
-    def __init__(self, mainboard: Mapping[Card, int] = None,
-                 sideboard: Mapping[Card, int] = None,
+class Deck(JSONable):
+    def to_json(self):
+        d = super().to_json()
+        l = list(self._mainboard.items())
+        d["mainboard"] = l
+        l = list(self._sideboard.items())
+        d["sideboard"] = l
+        d.update({"name": self.name})
+        return d
+
+    @classmethod
+    def from_json(cls, mainboard, sideboard, **kwargs):
+        return cls(mainboard=dict(mainboard), sideboard=dict(sideboard), **kwargs)
+
+    def __init__(self, mainboard: Union[Sequence[Card], Mapping[Card, int]] = None,
+                 sideboard: Union[Sequence[Card], Mapping[Card, int]] = None,
                  name: AnyStr = ""):
         self.name = name
-        if mainboard is None:
+        if mainboard is None or len(mainboard) == 0:
             self._mainboard = Counter()
         else:
             self._mainboard = Counter(mainboard)
@@ -109,7 +123,7 @@ class Deck:
         else:
             logger.info("Loading deck, done!")
 
-    def load(self, source: io.TextIO, reader: load_file.ReadFuncTy):
+    def load(self, source: TextIO, reader: load_file.ReadFuncTy):
         def create_counter(l: Sequence[CardCountTy]) -> Counter:
             c = Counter()
             for item in l:
@@ -170,7 +184,7 @@ class Deck:
         else:
             logger.info("Exporting deck, done!")
 
-    def save(self, outstream: io.TextIO, saver):
+    def save(self, outstream: TextIO, saver):
         saver(outstream, self.mainboard.items(), self.sideboard.items())
 
     def save_txt(self, fname: AnyStr):
@@ -206,8 +220,8 @@ class Deck:
         test_seq += Counter()
         return onum
 
-    def output_deck(self, target: io.TextIO,
-                    writer: Callable[["Deck", io.TextIO,
+    def output_deck(self, target: TextIO,
+                    writer: Callable[["Deck", TextIO,
                                       Sequence[Any], Mapping[str, Any]], None],
                     *args, **kwargs) -> None:
         writer(self, target, *args, **kwargs)

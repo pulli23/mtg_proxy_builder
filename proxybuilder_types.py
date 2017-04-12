@@ -15,15 +15,15 @@ class CounterTy(Counter, typing.Iterable[KT]):
     def __new__(cls, *args, **kwds):
         # noinspection PyProtectedMember
         if typing._geqv(cls, CounterTy):
-            raise TypeError("Type Dict cannot be instantiated; "
-                            "use dict() instead")
+            raise TypeError("Type CouterTy cannot be instantiated; "
+                            "use counter() instead")
         return Counter.__new__(cls, *args, **kwds)
 
 CardCountTy = Tuple[Card, int]
 CardCountSecTy = Tuple[Card, int, bool]
 CardIterTy = Iterable[CardCountTy]
 # CounterTy = Counter  # typing.Generic[Card]  # typing.TypeVar("CounterTy", Counter, Dict)
-CardDictTy = CounterTy[Card]
+CardDictTy = Counter
 CardListTy = Sequence[CardCountTy]
 ReadLineFuncTy = Callable[[str, Optional[Sequence[Any]], Optional[Mapping[str, Any]]],
                           Optional[CardCountSecTy]]

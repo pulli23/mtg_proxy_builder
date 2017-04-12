@@ -2,10 +2,9 @@ import os
 import requests
 import difflib
 import re
-from collections import Counter
-import itertools
 import functools
-from typing import List, Tuple, Iterable, Generator, Dict, Optional, Sequence
+from typing import List, Tuple, Iterable, Generator, Dict, Optional
+from card_set_codes import get_mtgset_codes
 
 from bs4 import BeautifulSoup, Tag
 
@@ -115,9 +114,9 @@ class HTMLAnalyzer:
         return self.info_tag.find("img")["alt"].lower() == "english"
 
     def analyse_main_rules(self) \
-            -> Tuple[Optional[List[mana_types.Mana]],
+            -> Tuple[str,
                      Optional[Tuple[int, int]],
-                     Tuple[List[str], str, List[str]]]:
+                     Tuple[List[str], List[str], List[str]]]:
         cls = type(self)
         english = self.is_english
         info_tag = self.info_tag
@@ -126,14 +125,15 @@ class HTMLAnalyzer:
         m = re.match("^\s*(.*?),?\s*\n\s*(.*?)\s*(\n*\s*)?$", linestr)
         type_line = m.group(1)
         mana_string = m.group(2)
-        mana = cls._analyse_mana_string(mana_string)
+        mana_string = mana_string.strip()  # strip whitespace from mana string
+        mana_string = re.sub("(\s*\(\d+\))?$", "", mana_string)  # remove cmc value
         if not english:
             division = info_tag.find("div", class_="oo")
             type_line = division.find("span").string
             type_line = str(type_line).strip()
         type_line, pt = cls._split_pt_from_type_line(type_line)
-        super_types, main_type, sub_types = cls._analyse_type_line(type_line)
-        return mana, pt, (super_types, main_type, sub_types)
+        super_types, main_types, sub_types = cls._analyse_type_line(type_line)
+        return mana_string, pt, (super_types, main_types, sub_types)
 
     def get_other_edition_links(self) -> Generator[str, None, None]:
         tag = self.ex_info_tag
@@ -164,30 +164,6 @@ class HTMLAnalyzer:
     def get_main_name(self) -> str:
         return self.info_tag.find("a").string
 
-    @staticmethod
-    def _listify_mana(mana_string) -> Sequence[str]:
-        mana_string = re.sub("(\s*\(\d+\))?$", "", mana_string)
-        special = (s[1:-1] for s in re.findall(r"{[^}]*}", mana_string))
-        mana_string = re.sub(r"{[^}]*}", "", mana_string)
-        general = re.findall("\d+", mana_string)
-        mana_string = re.sub("\d+", "", mana_string)
-        allmana = itertools.chain(general, mana_string, special)
-        return allmana
-
-    @classmethod
-    def _analyse_mana_string(cls, mana_string: str) -> Optional[List[mana_types.Mana]]:
-        mana_string = mana_string.strip()
-        if len(mana_string) == 0:
-            return None
-        cmc_list = cls._listify_mana(mana_string)
-        tdict = Counter(cmc_list)
-        t = []
-        for n, c in tdict.items():
-            try:
-                t.append(mana_types.Mana.make_mana(n, c))
-            except KeyError:
-                logger.error("Unknown mana: {0}".format(n))
-        return t
 
     @staticmethod
     def _split_pt_from_type_line(type_line: str) -> Tuple[str, Optional[Tuple[int, int]]]:
@@ -200,7 +176,10 @@ class HTMLAnalyzer:
         return types, pt
 
     @staticmethod
-    def _analyse_type_line(type_line: str) -> Tuple[List[str], str, List[str]]:
+    def _analyse_type_line(type_line: str) -> Tuple[List[str], List[str], List[str]]:
+        all_super_types = {
+            "basic", "elite", "legendary", "ongoing", "snow", "world"
+        }
         t = re.split(r"\s*(?:[-—])+\s*", type_line, maxsplit=1)
         super_ = t[0]
         if len(t) > 1:
@@ -208,21 +187,34 @@ class HTMLAnalyzer:
         else:
             sub = ""
         super_main_list = super_.split()
-        super_types = super_main_list[:-1]
-        main_type = super_main_list[-1]
+        super_types = []
+        main_types = []
+        for t in super_main_list:
+            if t.lower() in all_super_types:
+                super_types.append(t)
+            else:
+                main_types.append(t)
         sub_types = sub.split()
-        return super_types, main_type, sub_types
+        return super_types, main_types, sub_types
 
     def find_card_urls(self) \
             -> Generator[str, None, None]:
         yield self.get_main_edition_link()
         yield from self.get_other_edition_links()
 
+    def get_all_editions(self) -> Generator[Tuple[str, str, str], None, None]:
+        urls = self.find_card_urls()
+        card_infos = (analyse_hyperref(url) for url in urls)
+        return ((get_mtgset_codes().get(edition, edition), lan, colnum) for edition, lan, colnum in card_infos)
+
 
 def analyse_hyperref(href: str) -> Tuple[str, str, str]:
     htmllink = os.path.splitext(href)[0]
     edition, language, number = htmllink.strip('/.').split(sep='/')
     return edition, language, number
+
+
+
 
 
 class CardDownloader:

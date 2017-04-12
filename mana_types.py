@@ -1,7 +1,12 @@
 import re
 import abc
+import itertools
+from collections import Counter
 
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Sequence, Optional
+
+from mylogger import MAINLOGGER
+logger = MAINLOGGER
 
 
 class Mana(metaclass=abc.ABCMeta):
@@ -58,7 +63,6 @@ class Mana(metaclass=abc.ABCMeta):
         except ValueError:
             l = cls.get_all_subclasses()
             names = {class_.mana_sign(): class_ for class_ in l}
-            t = HybridWhiteMana.can_be_paid_by()
             manaclass = names[name]
             if issubclass(manaclass, Mana):
                 mana = manaclass(number)
@@ -252,3 +256,26 @@ class HybridRedMana(MonoColoredHybridMana, RedMana):
 
 class HybridGreenMana(MonoColoredHybridMana, GreenMana):
     pass
+
+
+def _listify_mana(mana_string) -> Sequence[str]:
+    special = (s[1:-1] for s in re.findall(r"{[^}]*}", mana_string))
+    mana_string = re.sub(r"{[^}]*}", "", mana_string)
+    general = re.findall("\d+", mana_string)
+    mana_string = re.sub("\d+", "", mana_string)
+    allmana = itertools.chain(general, mana_string, special)
+    return allmana
+
+
+def analyse_mana_string(mana_string: str) -> Optional[List[Mana]]:
+    if len(mana_string) == 0:
+        return None
+    cmc_list = _listify_mana(mana_string)
+    tdict = Counter(cmc_list)
+    t = []
+    for n, c in tdict.items():
+        try:
+            t.append(Mana.make_mana(n, c))
+        except KeyError:
+            logger.error("Unknown mana: {0}".format(n))
+    return t
