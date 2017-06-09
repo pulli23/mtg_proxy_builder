@@ -23,7 +23,7 @@ def find_image_url(urliter: Union[Iterable[str], Generator[str, None, None]],
         -> Generator[str, None, None]:
     # noinspection PyTypeChecker
     for url in urliter:
-        edition, language, number = card_dl.analyse_hyperref(url)
+        edition, language, number = card_dl.raw_analyser_hyperref(url)
         yield "{0}/scans/{1}.jpg".format(source,
                                          '/'.join((language,
                                                    card_dl.fix_magiccards_info_code(edition),
@@ -31,7 +31,7 @@ def find_image_url(urliter: Union[Iterable[str], Generator[str, None, None]],
                                          )
 
 
-def get_all_images(names: deck.Deck, output_directory: str, session: requests.Session = None) \
+def get_all_images(names: deck.Deck, output_directory: str, session: card_dl.CardDownloader = None) \
         -> Dict[card.Card, str]:
     logger.info("Loading images...", verbose_msg=os.path.abspath(output_directory))
     outnames = {}
@@ -52,9 +52,8 @@ def name_to_fname(name: str) -> str:
     return name.replace('/', '%2F').lower()
 
 
-def get_image(card: card.Card, output_directory: str, session: requests.Session = None) -> str:
+def get_image(card: card.Card, output_directory: str, session: card_dl.CardDownloader = None) -> str:
     os.makedirs(output_directory, exist_ok=True)
-
     outname = name_to_fname(card.name)
     try:
         if card.edition:
@@ -71,13 +70,15 @@ def get_image(card: card.Card, output_directory: str, session: requests.Session 
         logger.debug("Using existing file \"{0}\"".format(existing_fname))
         return existing_fname
     except StopIteration:
+        if session is None:
+            session = card_dl.CardDownloader()
         return download_card_image(card, output_directory, session)
 
 
 def download_card_image(card: card.Card, output_directory: str, session: card_dl.CardDownloader) \
         -> str:
     outname = name_to_fname(card.name)
-    analyzer = session.make_html_analyzer(card.name, card.edition, card.collectors_number, card.language)
+    analyzer = session.make_html_analyzer(card.name, card.edition, card.magiccards_info_number_list(), card.language)
     gen_card_urls = analyzer.find_card_urls()
     links = find_image_url(gen_card_urls)
     response = None

@@ -12,6 +12,7 @@ from proxybuilder_types import CardListTy, CardIterTy
 import card_downloader as cdl
 from export.jsonencoders import dump_string, dump_file
 import mylogger
+
 logger = mylogger.MAINLOGGER
 
 
@@ -20,6 +21,7 @@ def save_file(outstream: typing.TextIO, mainboard: CardIterTy, sideboard: CardIt
     mainboard = ((c, num, True) for c, num in mainboard)
     sideboard = ((c, num, False) for c, num in sideboard)
     longlist = itertools.chain(mainboard, sideboard)
+    longlist = list(longlist)
     for c, count, sec in longlist:
         line = card_process(c, count, sec)
         outstream.write(line)
@@ -48,7 +50,12 @@ def save_txt(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardLis
     save_file(outstream, mainboard, sideboard, card_processor)
 
 
-def save_csv(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardListTy) -> None:
+class WriteHandleCSVLine:
+    def __init__(self):
+        self.order = ["Count", "Name", "Type", "Price", "Section"]
+
+
+def save_csv(outstream: typing.TextIO, mainboard: CardListTy, sideboard: CardListTy, name: str = None) -> None:
     pass
 
 
@@ -76,13 +83,13 @@ class WriteHandleXMageLine:
             line += "SB: "
         if c.edition.lower() in self.unsupported_sets:
             if analyzer is None:
-                analyzer = self.session.make_html_analyzer(c.name, c.edition, c.collectors_number, c.language)
+                analyzer = self.session.make_html_analyzer(c.name, c.edition, next(c.magiccards_info_number_list()), c.language)
             try:
-                ed, lan, n = next((ed, lan, n)
-                                  for ed, lan, n in analyzer.get_all_editions()
-                                  if ed not in self.unsupported_sets)
+                ed, lan, n, is_double = next((ed, lan, n, is_double)
+                                             for ed, lan, n, is_double in analyzer.get_all_editions()
+                                             if ed not in self.unsupported_sets)
                 old_card = c
-                c = Card(old_card.name, ed, n, lan)
+                c = Card(old_card.name, ed, n, lan, is_double)
                 logger.warning("Set unsupported, card: {0}".format(old_card),
                                verbose_msg="New card: {0}".format(c))
             except StopIteration:

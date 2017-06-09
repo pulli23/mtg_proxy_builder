@@ -60,20 +60,26 @@ class HTMLAnalyzer:
                 pass
 
     def __init__(self, html: str, cardname: str = None):
-        self._soup = type(self)._make_soup(html)
+        self._soup = self._make_soup(html)
+        #if t is not None and t.strip().lower() == "Your query did not match any cards.".lower():
+        #    raise RuntimeError("card not found")
         self._cardname = cardname
         self._info_tag = None  # type:Optional[Tag]
         self._img_tag = None  # type:Optional[Tag]
         self._ex_info_tag = None  # type:Optional[Tag]
         self._is_english = None  # type:Optional[bool]
+        self._card_table_tuple_ = self._find_and_unpack_best_card_table()  # early catching error in loading
 
     def _find_and_unpack_best_card_table(self) -> Tuple[Tag, Tag, Tag]:
         cardtables = self.find_htmltext_tables()
         card_info_list = self.safe_unpack_cardtables(cardtables)
         if self._cardname is not None:
-            return type(self).pick_best_matching_card(self._cardname, card_info_list)
+            return self.pick_best_matching_card(self._cardname, card_info_list)
         else:
-            return next(card_info_list)
+            try:
+                return next(card_info_list)
+            except StopIteration:
+                raise ValueError("card not found")
 
     def find_htmltext_tables(self) -> List[Tag]:
         v = self._soup.find_all('table')
@@ -83,23 +89,30 @@ class HTMLAnalyzer:
         return v
 
     @property
+    def _card_table_tuple(self) -> Tuple[Tag, Tag, Tag]:
+        if self._card_table_tuple_ is None:
+            self._card_table_tuple_ = self._find_and_unpack_best_card_table()
+        return self._card_table_tuple_
+
+
+    @property
     def info_tag(self) -> Tag:
         if self._info_tag is None:
-            tup = self._find_and_unpack_best_card_table()  # type: Tuple[Tag, Tag, Tag]
+            tup = self._card_table_tuple  # type: Tuple[Tag, Tag, Tag]
             self._img_tag, self._info_tag, self._ex_info_tag = tup
         return self._info_tag
 
     @property
     def ex_info_tag(self) -> Tag:
         if self._ex_info_tag is None:
-            tup = self._find_and_unpack_best_card_table()
+            tup = self._card_table_tuple
             self._img_tag, self._info_tag, self._ex_info_tag = tup
         return self._ex_info_tag
 
     @property
     def img_tag(self) -> Tag:
         if self._img_tag is None:
-            tup = self._find_and_unpack_best_card_table()
+            tup = self._card_table_tuple
             self._img_tag, self._info_tag, self._ex_info_tag = tup
         return self._img_tag
 
@@ -135,7 +148,8 @@ class HTMLAnalyzer:
         super_types, main_types, sub_types = cls._analyse_type_line(type_line)
         return mana_string, pt, (super_types, main_types, sub_types)
 
-    def get_other_edition_links(self) -> Generator[str, None, None]:
+    def _find_extra_info_chapter(self, name: str) -> Tuple[Tag, Tag]:
+        name = name.lower()
         tag = self.ex_info_tag
         while not tag.string:
             tt = tag.find_all(True, recursive=False)
@@ -144,11 +158,31 @@ class HTMLAnalyzer:
         tags = parent_tag.find_all("u")
 
         start, n = next((tag, n) for n, tag in enumerate(tags)
-                        if "editions" in tag.get_text().lower())
+                        if name in tag.get_text().lower())
         if n < len(tags):
             end = tags[n + 1]
         else:
             end = None
+        return start, end
+
+    def get_other_part_links(self) -> Generator[str, None, None]:
+        start, end = self._find_extra_info_chapter("the other part")
+        curtag = start
+        while True:
+            curtag = curtag.next_sibling
+            if curtag != end:
+                if curtag.name == "a":
+                    yield curtag["href"]
+            else:
+                break
+
+
+    def get_card_parts(self):
+        self.get_main_edition_link()
+        analyse_hyperref()
+
+    def get_other_edition_links(self) -> Generator[str, None, None]:
+        start, end = self._find_extra_info_chapter("editions")
         curtag = start
         while True:
             curtag = curtag.next_sibling
@@ -202,19 +236,30 @@ class HTMLAnalyzer:
         yield self.get_main_edition_link()
         yield from self.get_other_edition_links()
 
-    def get_all_editions(self) -> Generator[Tuple[str, str, str], None, None]:
+    def get_all_editions(self) -> Generator[Tuple[str, str, int, Optional[str]], None, None]:
         urls = self.find_card_urls()
         card_infos = (analyse_hyperref(url) for url in urls)
-        return ((get_mtgset_codes().get(edition, edition), lan, colnum) for edition, lan, colnum in card_infos)
+        return ((get_mtgset_codes().get(edition, edition), lan, colnum, other_part)
+                for edition, lan, colnum, other_part in card_infos)
 
 
-def analyse_hyperref(href: str) -> Tuple[str, str, str]:
+def raw_analyser_hyperref(href: str) -> Tuple[str, str, str]:
     htmllink = os.path.splitext(href)[0]
     edition, language, number = htmllink.strip('/.').split(sep='/')
     return edition, language, number
 
 
-
+def analyse_hyperref(href: str) -> Tuple[str, str, int, Optional[str]]:
+    edition, language, number = raw_analyser_hyperref(href)
+    mo = re.match(r"^(\d+)([a-zA-Z]?)$", number)
+    if not mo:
+        raise ValueError("Bad link")
+    number = int(mo.group(1))
+    if mo.group(2):
+        other_part = mo.group(2)
+    else:
+        other_part = None
+    return edition, language, number, other_part
 
 
 class CardDownloader:
@@ -224,13 +269,13 @@ class CardDownloader:
 
     @functools.lru_cache(maxsize=512)
     def load_magic_card(self, name: str = None, edition: str = None,
-                        collectors_number: int = None, language: str = None) \
+                        collectors_number: str = None, language: str = None) \
             -> requests.Response:
         if self.session is None:
             session = requests
         else:
             session = self.session
-        if name is None and (edition or collectors_number is not None or language):
+        if name is None and not (edition and collectors_number and language):
             raise ValueError("Bad inputs")
         if edition and collectors_number is not None and language:
             url, payload = self._get_literal_url(edition, language, collectors_number)
@@ -242,10 +287,10 @@ class CardDownloader:
         res.raise_for_status()
         return res
 
-    def _get_literal_url(self, edition: str, language: str, collectors_number: int) \
+    def _get_literal_url(self, edition: str, language: str, collectors_number: str) \
             -> Tuple[str, Dict[str, str]]:
         url = "{0}/{1}.html".format(self.source, '/'.join((fix_magiccards_info_code(edition),
-                                                           language, str(collectors_number))))
+                                                           language, collectors_number)))
         payload = {}
         return url, payload
 
@@ -261,8 +306,16 @@ class CardDownloader:
         return url, payload
 
     def make_html_analyzer(self, name: str = None, edition: str = None,
-                           collectors_number: int = None, language: str = None) \
+                           collectors_number: str = None, language: str = None) \
             -> HTMLAnalyzer:
         res = self.load_magic_card(name, edition, collectors_number, language)
-        analyser = HTMLAnalyzer(res.text, cardname=name)
+        try:
+            analyser = HTMLAnalyzer(res.text, cardname=name)
+        except ValueError:
+            if collectors_number and re.match(r"^\d+[a-zA-Z]$", collectors_number):
+                raise
+            else:
+                logger.info(verbose_msg="Trying special card number")
+                res = self.load_magic_card(name, edition, collectors_number + 'a', language)
+                analyser = HTMLAnalyzer(res.text, cardname=name)
         return analyser

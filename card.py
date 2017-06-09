@@ -1,4 +1,4 @@
-from typing import AnyStr, Optional, Tuple, Generator, Dict
+from typing import AnyStr, Optional, Tuple, Generator, Dict, List, Union
 
 import card_downloader as card_dl
 import mana_types
@@ -34,8 +34,8 @@ class Card(JSONable):
         return newcard
 
     def __init__(self, name: AnyStr, edition: AnyStr = None,
-                 collectors_number: int = None, language: str = "en", **kwargs):
-        self._name = name
+                 collectors_number: int = None, language: str = None, side_num: List[str] = None, **kwargs):
+        self._name = name.lower()
         self._version = get_mtgset_codes().get(edition, edition)
         self._colnum = collectors_number
         self._language = language
@@ -44,11 +44,18 @@ class Card(JSONable):
         self._supertypes = []
         self._pt = None
         self._mana = None
+        self.card_side_num = side_num
+        if side_num is None:
+            self.card_side_num = []
 
     def alike(self, other: "Card") -> bool:
         sv = self.edition
         ov = other.edition
-        return (not sv or not ov or sv == ov) and self.name.lower() == other.name.lower()
+        sl = self.language
+        ol = other.language
+        return (not sv or not ov or sv == ov) and \
+               (not sl or not ol or sl == ol) and \
+               self.name == other.name
 
     @property
     def language(self) -> str:
@@ -86,7 +93,7 @@ class Card(JSONable):
         return self._mana
 
     @mana.setter
-    def mana(self, mana_string:str):
+    def mana(self, mana_string: str):
         self._mana = mana_types.analyse_mana_string(mana_string)
 
     def __eq__(self, other: "Card") -> bool:
@@ -132,31 +139,54 @@ class Card(JSONable):
             gen = str(types[mana_types.GenericMana])
         return gen + ''.join(str(m) for m in self.mana if type(m) != mana_types.GenericMana)
 
+    def magiccards_info_number_list(self) -> Generator[str, None, None]:
+        colnum = str(self.collectors_number)
+        return (colnum + idx for idx in self.card_side_num)
+
+    def __lt__(self, other):
+        return (self.name,
+                self.edition if self.edition is not None else "",
+                self.language if self.language is not None else "") \
+               < (other.name,
+                  other.edition if other.edition is not None else "",
+                  other.language if other.language is not None else "")
+
+    def is_specific(self, other: "Card") -> bool:
+        sv = self.edition
+        ov = other.edition
+        sl = self.language
+        ol = other.language
+        return (not ov or sv == ov) and \
+               (not ol or sl == ol) and \
+               self.name == other.name
+
 
 def force_edition_and_number_copy(card: Card, session: card_dl.CardDownloader = None) -> Card:
     if session is None:
         session = card_dl.CardDownloader()
-    analyzer = session.make_html_analyzer(card.name, card.edition, card.collectors_number, card.language)
+    analyzer = session.make_html_analyzer(card.name, card.edition, next(card.magiccards_info_number_list()),
+                                          card.language)
     edition = card.edition
     num = card.collectors_number
     language = card.language
-    if edition is None or num is None:
+    parts = card.card_side_num
+    if not edition or not num:
         url = next(analyzer.find_card_urls())
-        edition, language, num = card_dl.analyse_hyperref(url)
+        edition, language, num, other_part = card_dl.analyse_hyperref(url)
 
-    return Card(card.name, edition, num, language)
+    return Card(analyzer.get_main_name(), edition, num, language, parts)
 
 
 def make_fully_qualified_card_from_info(analyzer: card_dl.HTMLAnalyzer) -> Card:
     url = analyzer.get_main_edition_link()
-    edition, language, collectors_number = card_dl.analyse_hyperref(url)
+    edition, language, collectors_number, is_double = card_dl.analyse_hyperref(url)
     name = analyzer.get_main_name()
-    card = Card(name, edition, int(collectors_number), language)
+    card = Card(name, edition, int(collectors_number), language, is_double)
     return card
 
 
 def make_fully_qualified_card(name: AnyStr = None, edition: AnyStr = None,
-                              collectors_number: int = None, language: AnyStr = None,
+                              collectors_number: str = None, language: AnyStr = None,
                               session: card_dl.CardDownloader = None) -> Card:
     if name is None and (edition is None or collectors_number is None):
         raise ValueError("bad inputs")
@@ -168,8 +198,3 @@ def make_fully_qualified_card(name: AnyStr = None, edition: AnyStr = None,
         edition = get_mtgset_codes().get(edition, edition)
     analyzer = session.make_html_analyzer(name, edition, collectors_number, language)
     return make_fully_qualified_card_from_info(analyzer)
-
-
-
-
-

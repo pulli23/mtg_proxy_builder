@@ -170,9 +170,10 @@ class Deck(JSONable):
             with open(fname, 'w') as f:
                 self.save(f, exportfunc)
         except ValueError as e:
-            logger.error("While handling file {1} "
-                         "the following errors occured:\n - {0};".format('\n - '.join(e.args),
-                                                                         os.path.abspath(fname)))
+            logger.error("While saving file {1} "
+                         "the following errors occured:\n - {0}".format('\n - '.join(e.args),
+                                                                              os.path.abspath(fname)))
+            raise
         except (FileNotFoundError, IsADirectoryError):
             logger.error("file {0} does not exist".format(os.path.abspath(fname)))
         except PermissionError:
@@ -296,27 +297,71 @@ def remove_basic_lands(dck: Deck, basics: Iterable[Card] = None) -> Deck:
     return outdck
 
 
-def exclude_inventory(dck: Deck, inventory: Deck) -> Deck:
-    inv_counter = inventory.full_deck
+def exclude_inventory_from_deck(dck: Deck, inventory: Deck) -> Deck:
+    """
+    Remove cards inside a *more specific* inventory from a *generic* deck.
+        - If the deck has defined a version and language, 
+          those can only be excluded by cards in the inventory that also have defined these properties as the same
+        - If a card in the inventory has no version/language it only excludes cards in the deck without this
+    """
+    inv_view = sorted(inventory.full_deck.items(), key=lambda x: x[0], reverse=False)
+    dck_view = sorted(dck.full_deck.items(), key=lambda x: x[0], reverse=True)
     main_out = Counter()
     side_out = Counter()
-    outskipped = Counter()
 
-    view = sorted(dck.full_deck.items(), key=lambda x: (x[0].name, x[0].edition), reverse=True)
-    for card, num in view:
-        if num > 0:
-            num_owned = sum(num for item, num in inv_counter.items() if card.alike(item))
-            num_skipped = sum(num for item, num in outskipped.items() if card.alike(item))
-            if num_skipped < num_owned:
-                onum = num
-                num -= min(num_owned - num_skipped, num)
-                outskipped[card] = min(num_owned, num_skipped + num)
-                logger.debug(verbose_msg="Removed {0} {1}".format(onum - num, card))
-            if num > 0:
-                if card in dck.mainboard:
-                    main_out[card] += num
+    for card_indeck, num_indeck in dck_view:
+        if num_indeck > 0:
+            for i, t in enumerate(inv_view):
+                (card_ininv, num_ininv) = t
+                if num_ininv > 0 and card_ininv.is_specific(card_indeck):
+                    onum = num_indeck
+                    num_removing = min(num_indeck, num_ininv)
+                    num_indeck -= num_removing
+                    num_ininv -= num_removing
+                    inv_view[i] = (card_indeck, num_ininv)
+                    logger.info(verbose_msg="removed {0} times '{1}' for '{2}'"
+                                .format(onum-num_indeck, card_ininv, card_indeck))
+                if num_indeck <= 0:
+                    break
+            if num_indeck > 0:
+                if card_indeck in dck.mainboard:
+                    main_out[card_indeck] += num_indeck
                 else:
-                    side_out[card] += num
+                    side_out[card_indeck] += num_indeck
+    return Deck(main_out, side_out)
+
+
+def exclude_deck_from_inventory(inventory: Deck, dck: Deck) -> Deck:
+    """
+    Remove cards inside a *generic* deck from a *more specific* inventory.
+        - If the inventory has defined a version and language, 
+          those can also be excluded by cards in the deck without these specified
+        - If a card in the deck has a version/language it only excludes cards in the inventory with the same property
+    """
+    dck_view = sorted(dck.full_deck.items(), key=lambda x: x[0], reverse=True)
+    main_out = Counter()
+    side_out = Counter()
+
+    view = sorted(inventory.full_deck.items(), key=lambda x: x[0], reverse=False)
+    for card_ininv, num_ininv in view:
+        if num_ininv > 0:
+            for i, t in enumerate(dck_view):
+                (card_indeck, num_indeck) = t
+                if num_indeck > 0 and card_ininv.is_specific(card_indeck):
+                    onum = num_ininv
+                    num_removing = min(num_ininv, num_indeck)
+                    num_ininv -= num_removing
+                    num_indeck -= num_removing
+                    dck_view[i] = (card_indeck, num_indeck)
+                    logger.info(verbose_msg="removed {0} times '{1}' for '{2}'"
+                                .format(onum-num_indeck, card_ininv, card_indeck))
+                if num_ininv <= 0:
+                    break
+            if num_ininv > 0:
+                if card_ininv in inventory.mainboard:
+                    main_out[card_ininv] += num_ininv
+                else:
+                    side_out[card_ininv] += num_ininv
     return Deck(main_out, side_out)
 
 

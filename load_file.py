@@ -31,14 +31,35 @@ def process_deckbox_deck_row(row: Tuple[AnyStr, ...]) -> Optional[CardCountSecTy
         return None
 
 
+def get_language(lan_str: str):
+    lookup = {
+        "english": "en",
+        "german": "de",
+        "french": "fr",
+        "italian": "it",
+        "spanish": "es",
+        "portugese": "pt",
+        "japanese": "jp",
+        "russian": "ru",
+        "korean": "ko",
+        "chinese": "cn",
+        "traditional chinese": "tw"
+    }
+    return lookup.get(lan_str, lan_str)
+
+
 def process_csv_row(row: Tuple[AnyStr, ...], name_column: int, count_column: int,
-                    version_column: int = None, section_column: int = None) \
+                    version_column: int = None, section_column: int = None,
+                    collectors_num_column: int = None, language_column: int = None) \
         -> Optional[CardCountSecTy]:
     try:
-        v = row[version_column].lower() if version_column is not None else ""
-        s = True if section_column is None or row[section_column].lower() == "main" else False
-        c = Card(row[name_column].lower(), v)
         n = int(row[count_column])
+        v = row[version_column].lower() if version_column is not None else None
+        i = row[collectors_num_column] if collectors_num_column is not None else None
+        i = int(i) if i else None
+        l = get_language(row[language_column].lower()) if language_column is not None else None
+        s = True if section_column is None or row[section_column].lower() == "main" else False
+        c = Card(row[name_column].lower(), edition=v, collectors_number=i, language=l)
         return c, n, s
     except (ValueError, IndexError):
         return None
@@ -59,15 +80,17 @@ def read_inventory_deckbox_org(file: typing.TextIO, *args, **kwargs) \
 
 
 def read_csv(file: typing.TextIO, name_column: int = 1, count_column: int = 0,
-             section_column: int = None, version_column: int = None, *args,
-             **kwargs) \
+             section_column: int = None, version_column: int = None,
+             collectors_num_column: int = None, language_column: int = None, *args, **kwargs) \
         -> Tuple[CardListTy, CardListTy]:
     csvreader = csv.reader(file, *args, **kwargs)
     return read_file(csvreader, lambda line: process_csv_row(line,
                                                              name_column,
                                                              count_column,
                                                              version_column=version_column,
-                                                             section_column=section_column
+                                                             section_column=section_column,
+                                                             collectors_num_column=collectors_num_column,
+                                                             language_column=language_column
                                                              ))
 
 
@@ -232,11 +255,22 @@ def sniff_reader(file: typing.TextIO, num: int = 40) -> ReadFuncTy:
                 version_column = line.index("edition")
             except ValueError:
                 version_column = None
+            try:
+                collectors_num_column = line.index("card number")
+            except ValueError:
+                collectors_num_column = None
+            try:
+                language_column = line.index("language")
+            except ValueError:
+                language_column = None
+
             ret = lambda file: read_csv(file,
                                         name_column=name_column,
                                         count_column=count_column,
                                         version_column=version_column,
                                         section_column=section_column,
+                                        collectors_num_column=collectors_num_column,
+                                        language_column=language_column,
                                         dialect=dialect)
     else:
         mylogger.MAINLOGGER.info("JSON file guessed")

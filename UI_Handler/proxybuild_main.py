@@ -1,11 +1,12 @@
 import os
 from typing import Iterable, List, AnyStr
-import requests
 
+import card
 import deck
 import load_file
 import mylogger
 import proxy.image_downloader as imd
+import card_downloader as cdl
 
 logger = mylogger.MAINLOGGER
 
@@ -13,7 +14,7 @@ logger = mylogger.MAINLOGGER
 def load_existing_decks(maindeck: deck.Deck,
                         decklist: Iterable[AnyStr],
                         readfun: load_file.ReadFuncTy,
-                        other_decks: deck.Deck = None) -> List[deck.Deck]:
+                        other_decks: List[deck.Deck] = None) -> List[deck.Deck]:
     if other_decks is None:
         # noinspection PyShadowingNames
         other_decks = []
@@ -39,7 +40,10 @@ def build_proxies(settings):
 
     dck = deck.Deck()
     dck.guarded_load(settings.input, settings.readfunc)
-    other_decks = load_existing_decks(dck, settings.alldecks, settings.alldecks_readfunc)
+    if settings.alldecks is None:
+        other_decks = []
+    else:
+        other_decks = load_existing_decks(dck, settings.alldecks, settings.alldecks_readfunc)
     logger.info("Removing existing decks from inventory")
     for i, d in enumerate(other_decks):
         if not settings.specific_edition:
@@ -47,9 +51,12 @@ def build_proxies(settings):
         if not settings.include_basics:
             d = deck.remove_basic_lands(d)
         other_decks[i] = d
-
+    from collections import Counter
+    c = Counter()
     for other_deck in other_decks:
-        combined_inv = deck.exclude_inventory(combined_inv, other_deck)
+        c += other_deck.full_deck
+    combined_other_deck = deck.Deck(c)
+    combined_inv = deck.exclude_deck_from_inventory(combined_inv, combined_other_deck)
 
     if not settings.specific_edition:
         dck = deck.Deck(*dck.remove_version())
@@ -59,10 +66,12 @@ def build_proxies(settings):
     else:
         proxies = dck
     logger.info("Removing remaining inventory from input deck")
-    proxies = deck.exclude_inventory(proxies, combined_inv)
+
+    proxies = deck.exclude_inventory_from_deck(proxies, combined_inv)
+
     logger.info(verbose_msg="PROXY LIST")
     logger.info(verbose_msg=str(proxies))
-    session = requests.session()
+    session = cdl.CardDownloader()
     image_fnames = imd.get_all_images(proxies, settings.figures, session)
     rel_fig_dir = os.path.relpath(settings.figures, os.path.dirname(settings.output))
     if rel_fig_dir == ".":
@@ -74,5 +83,6 @@ def build_proxies(settings):
                                  card_dimensions=None,
                                  background_colour=settings.background
                                  )
+    tdeck = deck.exclude_inventory_from_deck(dck, proxies)
     logger.info("--- Already owned cards ---")
-    logger.info(deck.exclude_inventory(dck, proxies))
+    logger.info(tdeck)
